@@ -26,6 +26,7 @@ NOTICE_PID_FILE = STATE_DIR / "notice-worker.json"
 NOTICE_LOG_FILE = STATE_DIR / "notice-worker.log"
 SLEEP_PID_FILE = STATE_DIR / "sleep-worker.json"
 SLEEP_LOG_FILE = STATE_DIR / "sleep-worker.log"
+GUI_PID_FILE = STATE_DIR / "gui-daemon.pid"
 SESSION_FILE = STATE_DIR / "sessions.json"
 LOCK_FILE = STATE_DIR / "state.lock"
 SESSION_TTL_SECONDS = int(os.environ.get("SIGNAL_LIGHT_SESSION_TTL_SECONDS", "86400"))
@@ -547,6 +548,44 @@ def _terminate(pid: int) -> None:
         raise SignalLightError(f"Cannot stop existing signal worker {pid}: {exc}") from exc
 
 
+def _terminate_process_group(pid: int) -> None:
+    """Send SIGTERM to the process group rooted at *pid*, then SIGKILL if needed.
+
+    The GUI daemon spawns child processes (e.g. rumps/uv).  Killing the whole
+    group ensures the menu-bar icon is removed when the daemon stops.
+    """
+    if not _is_running(pid):
+        return
+
+    pgid = _safe_getpgid(pid)
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        # Fallback to single-process kill.
+        _terminate(pid)
+        return
+
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if not _is_running(pid):
+            return
+        time.sleep(0.05)
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
+def _safe_getpgid(pid: int) -> int:
+    """Return the process group ID for *pid*, falling back to *pid* itself."""
+    try:
+        return os.getpgid(pid)
+    except (ProcessLookupError, OSError):
+        return pid
+
+
 def _is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -555,3 +594,71 @@ def _is_running(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+# ---------------------------------------------------------------------------
+# GUI daemon management
+# ---------------------------------------------------------------------------
+
+def start_gui_daemon() -> int | None:
+    """Spawn the GUI daemon in the background.  Returns the PID or *None* if already running."""
+    if is_gui_daemon_running():
+        return None
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Use the current Python interpreter directly.  Users must have the gui
+    # extras installed in their venv (``uv sync --extra gui``).
+    # Set UV_PYTHON to match the current interpreter so uv doesn't recreate the
+    # venv for a different Python version from .python-version.
+    command = [sys.executable, "-m", "signal_light", "gui-daemon"]
+    env = os.environ.copy()
+    env["UV_PYTHON"] = f"{sys.version_info.major}.{sys.version_info.minor}"
+
+    log = (STATE_DIR / "gui-daemon.log").open("ab")
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            cwd=PROJECT_ROOT,
+            env=env,
+            start_new_session=True,
+        )
+    finally:
+        log.close()
+    GUI_PID_FILE.write_text(str(process.pid))
+    return process.pid
+
+
+def stop_gui_daemon() -> bool:
+    """Stop the GUI daemon and all its child processes.
+
+    Returns ``True`` if a running daemon was found and killed.
+    The launchd service stays loaded — on next login it will auto-start again.
+    """
+    pid = _read_gui_daemon_pid()
+    was_running = pid is not None and _is_running(pid)
+    if was_running:
+        _terminate_process_group(pid)
+    _clear_gui_daemon_pid()
+    return was_running
+
+
+def is_gui_daemon_running() -> bool:
+    pid = _read_gui_daemon_pid()
+    return pid is not None and _is_running(pid)
+
+
+def _read_gui_daemon_pid() -> int | None:
+    try:
+        return int(GUI_PID_FILE.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _clear_gui_daemon_pid() -> None:
+    try:
+        GUI_PID_FILE.unlink()
+    except FileNotFoundError:
+        pass

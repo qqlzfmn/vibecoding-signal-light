@@ -196,6 +196,7 @@ def run_install_wizard(
     all_agents: bool = False,
     yes: bool = False,
     dry_run: bool = False,
+    no_gui: bool = False,
     home: Path | None = None,
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
@@ -236,6 +237,9 @@ def run_install_wizard(
         print(f"Installed {spec.name}: {result.status.message}", file=out)
         if result.backup_path is not None:
             print(f"  backup: {result.backup_path}", file=out)
+
+    if not no_gui and not dry_run:
+        _offer_gui_install(out, input_stream, yes)
 
     return 0
 
@@ -462,3 +466,29 @@ def _hook_command(spec: AgentSpec, event: str) -> str:
     if spec.passes_event_arg:
         return f"{quoted_script} {event}"
     return quoted_script
+
+
+def _offer_gui_install(out: TextIO, input_stream: TextIO, yes: bool) -> None:
+    try:
+        import rumps  # noqa: F401
+    except ImportError:
+        return
+
+    if yes:
+        answer = "y"
+    else:
+        print("", file=out)
+        print("Install macOS menu bar app? [y/N]: ", end="", file=out)
+        out.flush()
+        answer = input_stream.readline().strip().lower()
+
+    if answer not in {"y", "yes"}:
+        return
+
+    try:
+        from signal_light.gui.launchd import install_plist
+        from signal_light.runtime import PROJECT_ROOT, STATE_DIR
+        path = install_plist(PROJECT_ROOT, STATE_DIR)
+        print(f"GUI daemon installed: {path}", file=out)
+    except Exception as exc:
+        print(f"Failed to install GUI daemon: {exc}", file=out)

@@ -1,16 +1,16 @@
 [project]
 name = "signal-light"
-version = "0.1.0"
-description = "Physical traffic-light status display for AI coding agents."
+version = "0.2.0"
+description = "Status light for AI coding agents — physical traffic light or macOS menu bar."
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = [
     "ai-agent",
     "codex",
     "claude-code",
-    "gpio",
-    "mcp2221a",
     "status-light",
+    "macos",
+    "menu-bar",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -20,9 +20,20 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Topic :: Software Development",
     "Topic :: System :: Hardware",
+    "Operating System :: MacOS",
 ]
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+hardware = [
     "EasyMCP2221>=1.8.0",
+]
+gui = [
+    "rumps>=0.4.0",
+]
+all = [
+    "EasyMCP2221>=1.8.0",
+    "rumps>=0.4.0",
 ]
 
 [dependency-groups]
@@ -39,3 +50,6 @@ claude-code-signal-hook = "signal_light.claude_code_hook:main"
 Homepage = "https://github.com/starlight36/vibecoding-signal-light"
 Repository = "https://github.com/starlight36/vibecoding-signal-light"
 Issues = "https://github.com/starlight36/vibecoding-signal-light/issues"
+
+[tool.uv]
+package = true

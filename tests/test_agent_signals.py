@@ -37,18 +37,13 @@ def test_idle_signal_leaves_green_on() -> None:
     assert light.states[-1] == (True, False, False)
 
 
-def test_working_signal_uses_soft_green_yellow_red_cycle() -> None:
+def test_working_signal_flashes_green() -> None:
     light = RecordingLight()
 
     SIGNALS["working"].play(light, speed=0.05, cycles=1)
 
     assert SIGNALS["working"].repeat is True
-    assert len(light.brightness_states) == 27
-    assert all(green > 0 and yellow == 0 and red == 0 for green, yellow, red in light.brightness_states[:9])
-    assert all(green == 0 and yellow > 0 and red == 0 for green, yellow, red in light.brightness_states[9:18])
-    assert all(green == 0 and yellow == 0 and red > 0 for green, yellow, red in light.brightness_states[18:27])
-    assert light.brightness_states[0][0] < light.brightness_states[4][0]
-    assert light.brightness_states[4][0] > light.brightness_states[8][0]
+    assert light.states[:2] == [(True, False, False), (False, False, False)]
 
 
 def test_attention_signal_flashes_yellow() -> None:
@@ -60,16 +55,13 @@ def test_attention_signal_flashes_yellow() -> None:
     assert light.states[:2] == [(False, True, False), (False, False, False)]
 
 
-def test_thinking_signal_uses_work_cycle() -> None:
+def test_thinking_signal_flashes_green() -> None:
     light = RecordingLight()
 
     SIGNALS["thinking"].play(light, speed=0.05, cycles=1)
 
     assert SIGNALS["thinking"].frames == SIGNALS["working"].frames
-    assert len(light.brightness_states) == 27
-    assert light.brightness_states[0] == (0.10, 0.0, 0.0)
-    assert light.brightness_states[9] == (0.0, 0.10, 0.0)
-    assert light.brightness_states[18] == (0.0, 0.0, 0.10)
+    assert light.states[:2] == [(True, False, False), (False, False, False)]
 
 
 def test_permission_signal_flashes_yellow() -> None:
@@ -738,7 +730,7 @@ def test_install_hooks_cli_invokes_wizard(monkeypatch) -> None:
 
     assert cli.main(["install-hooks", "--agent", "codex", "--dry-run"]) == 0
 
-    assert calls == [{"selected_agents": ["codex"], "all_agents": False, "yes": False, "dry_run": True}]
+    assert calls == [{"selected_agents": ["codex"], "all_agents": False, "yes": False, "dry_run": True, "no_gui": False}]
 
 
 def test_apply_session_signal_clears_non_urgent_session_on_turn_end(tmp_path, monkeypatch) -> None:

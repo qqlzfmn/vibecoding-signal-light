@@ -9,7 +9,7 @@ The language is deliberately small: the current light must always describe the c
 | Light | Meaning | Human action |
 | --- | --- | --- |
 | steady green | Codex is idle | Nothing |
-| slow green-yellow-red cycle | Codex is thinking, using tools, or otherwise working | Wait |
+| flashing green | Codex is thinking, using tools, or otherwise working | Wait |
 | flashing yellow | Codex explicitly needs you to read or continue | Look at Codex when convenient |
 | flashing red | Codex needs permission, is blocked, or hit a failure | Look at Codex now |
 | off | Manual clear | Nothing |
@@ -23,9 +23,9 @@ The CLI still exposes named signals so hooks and other agents can use stable wor
 | Signal | Light | Meaning |
 | --- | --- | --- |
 | `idle` | steady green | Agent is idle |
-| `thinking` | slow green-yellow-red cycle | Agent has received the prompt and is thinking |
-| `working` | slow green-yellow-red cycle | Agent is using tools, editing, running commands, or testing |
-| `tool_done` | slow green-yellow-red cycle | A tool call finished, but the agent is still in an active workflow |
+| `thinking` | flashing green | Agent has received the prompt and is thinking |
+| `working` | flashing green | Agent is using tools, editing, running commands, or testing |
+| `tool_done` | flashing green | A tool call finished, but the agent is still in an active workflow |
 | `attention` | flashing yellow | Agent explicitly expects you to read or continue |
 | `done` | flashing yellow | Task completed; read the final answer |
 | `permission` | flashing red | Codex requests permission |
@@ -40,9 +40,9 @@ The CLI still exposes named signals so hooks and other agents can use stable wor
 | Codex event | Signal | Light |
 | --- | --- | --- |
 | `SessionStart` | `session_start` | steady green |
-| `UserPromptSubmit` | `thinking` | slow green-yellow-red cycle |
-| `PreToolUse` | `working` | slow green-yellow-red cycle |
-| `PostToolUse` | `tool_done` | slow green-yellow-red cycle |
+| `UserPromptSubmit` | `thinking` | flashing green |
+| `PreToolUse` | `working` | flashing green |
+| `PostToolUse` | `tool_done` | flashing green |
 | `PermissionRequest` | `permission` | flashing red |
 | `Stop` | `turn_end` | clears non-urgent session state |
 | `SessionEnd` | `session_end` | brief green completion blink, then aggregate state |
@@ -53,17 +53,17 @@ If the hook payload reports failure through structured fields such as `status`, 
 
 Animated states are persistent. The command starts a small background worker and returns immediately, which keeps Codex hooks fast. The next steady state stops the worker before setting its own light. `Stop` is treated as the end of a normal turn, so it clears working state instead of flashing yellow after every response.
 
-The work cycle includes brightness levels for drivers that can dim LEDs. The current MCP2221A GPIO driver uses plain on/off output instead of software PWM, because USB GPIO timing makes simulated dimming visibly flicker.
+The work state uses a simple green flash. The work flash includes brightness levels for drivers that can dim LEDs. The current MCP2221A GPIO driver uses plain on/off output instead of software PWM, because USB GPIO timing makes simulated dimming visibly flicker.
 
 Codex hook state is session-aware. Each session stores its own latest signal, then the physical light shows the highest-priority aggregate:
 
 ```text
-flashing red > flashing yellow > green-yellow-red work cycle > steady green
+flashing red > flashing yellow > flashing green (work) > steady green
 ```
 
 For example, if one Codex session is waiting for permission and another session starts working, the light stays flashing red. If one session is waiting for you to read a result and another session is working, the light stays flashing yellow.
 
-When a tracked session ends, the runtime briefly flashes green to make the completion visible. After that cue, it recomputes the aggregate: if other sessions are still working, the green-yellow-red cycle resumes; if no sessions remain, the light settles on steady green. Red and yellow alerts stay higher priority, so the green completion cue does not interrupt an active permission, blocked, attention, or done state.
+When a tracked session ends, the runtime briefly flashes green to make the completion visible. After that cue, it recomputes the aggregate: if other sessions are still working, the green flash resumes; if no sessions remain, the light settles on steady green. Red and yellow alerts stay higher priority, so the green completion cue does not interrupt an active permission, blocked, attention, or done state.
 
 ## Wiring Defaults
 
@@ -116,13 +116,13 @@ The wrapper scripts avoid writing `__pycache__` files in the repository. By defa
 | Claude Code event | Signal | Light |
 | --- | --- | --- |
 | `SessionStart` | `session_start` | steady green |
-| `UserPromptSubmit` | `thinking` | slow green-yellow-red cycle |
-| `PreToolUse` | `working` | slow green-yellow-red cycle |
-| `PostToolUse` | `tool_done` | slow green-yellow-red cycle |
+| `UserPromptSubmit` | `thinking` | flashing green |
+| `PreToolUse` | `working` | flashing green |
+| `PostToolUse` | `tool_done` | flashing green |
 | `PostToolUseFailure` | `blocked` | flashing red |
-| `PreCompact` | `working` | slow green-yellow-red cycle |
-| `SubagentStart` | `working` | slow green-yellow-red cycle |
-| `SubagentStop` | `tool_done` | slow green-yellow-red cycle |
+| `PreCompact` | `working` | flashing green |
+| `SubagentStart` | `working` | flashing green |
+| `SubagentStop` | `tool_done` | flashing green |
 | `PermissionRequest` | `permission` | flashing red |
 | `Notification` | `attention` | flashing yellow |
 | `Stop` | `turn_end` | clears non-urgent session state |
