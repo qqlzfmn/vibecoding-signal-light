@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import atexit
 import os
-import signal
 import time
 from pathlib import Path
 from typing import Any
@@ -139,16 +138,18 @@ class _SignalLightApp:
     def _poll_session(self) -> None:
         try:
             snapshot = read_session_snapshot()
+            aggregate = snapshot.get("aggregate", "idle")
         except Exception:
             return
 
-        aggregate = snapshot.get("aggregate", "idle")
-        if not isinstance(aggregate, str):
-            aggregate = "idle"
-
         if aggregate != self._current_aggregate:
+            old_signal = SIGNALS.get(self._current_aggregate)
+            new_signal = SIGNALS.get(aggregate)
+            old_repeat = old_signal.repeat if old_signal else False
+            new_repeat = new_signal.repeat if new_signal else False
             self._current_aggregate = aggregate
-            self._signal_started_at = time.monotonic()
+            if old_repeat != new_repeat:
+                self._signal_started_at = time.monotonic()
 
         self._update_icon(aggregate)
         self._update_panel(aggregate, snapshot)
@@ -163,8 +164,8 @@ class _SignalLightApp:
 
         if signal.repeat and signal.frames:
             elapsed = time.monotonic() - self._signal_started_at
-            _, frame = compute_current_frame(elapsed, signal.frames)
-            brightness = frame.brightness if (frame.green or frame.yellow or frame.red) else 0.0
+            flash_on = int(elapsed / POLL_INTERVAL) % 2 == 0
+            brightness = 1.0 if flash_on else 0.0
         elif signal.leave_on is not None:
             brightness = 1.0
         else:
