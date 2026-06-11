@@ -2,37 +2,27 @@
 
 Runs a persistent ``rumps.App`` in the menu bar that polls
 ``sessions.json`` and renders the current aggregate signal as a coloured
-icon.  Clicking the status item opens a small tkinter traffic-light panel.
+icon.  Clicking the status item opens a small tkinter traffic-light panel
+that runs in a separate process to avoid Cocoa/Tcl event-loop conflicts.
 """
 
 from __future__ import annotations
 
 import atexit
+import json
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from signal_light.agent_signals import SIGNALS, Frame
+from signal_light.gui.const import ICON_COLOR_MAP
 from signal_light.gui.icon_generator import generate_all_icons, get_icon_path
 from signal_light.runtime import read_session_snapshot
 
 POLL_INTERVAL = float(os.environ.get("SIGNAL_LIGHT_GUI_POLL_MS", "500")) / 1000.0
-
-ICON_COLOR_MAP: dict[str, str] = {
-    "idle": "green",
-    "thinking": "green",
-    "working": "green",
-    "tool_done": "green",
-    "attention": "yellow",
-    "permission": "yellow",
-    "done": "yellow",
-    "blocked": "red",
-    "session_start": "green",
-    "session_end": "green",
-    "session_done": "green",
-    "off": "grey",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +77,9 @@ class _SignalLightApp:
 
     Instantiated with the ``rumps`` module so the import is deferred to runtime.
 
-    tkinter is driven from the rumps timer (no separate thread) to avoid
-    macOS framework conflicts between NSApplication and Tk.
+    The detail panel runs as a child process (``_panel_process``) with
+    its own tkinter event loop, completely isolating Tcl/Tk from Cocoa.
+    Commands are sent over the child's stdin as one-JSON-per-line.
     """
 
     def __init__(self, state_dir: Path, rumps_mod: Any) -> None:
@@ -106,9 +97,9 @@ class _SignalLightApp:
         self._current_aggregate: str = "off"
         self._signal_started_at: float = time.monotonic()
 
-        # tkinter — created lazily on first panel show, driven by the timer.
-        self._tk_root: Any = None
-        self._panel: _DetailPanel | None = None
+        # Panel child process — spawned lazily on first toggle.
+        self._panel_proc: subprocess.Popen | None = None
+        self._panel_visible: bool = False
 
         self._build_menu()
 
@@ -133,7 +124,14 @@ class _SignalLightApp:
 
     def _on_tick(self, _timer: Any = None) -> None:
         self._poll_session()
-        self._pump_tk()
+        self._reap_panel()
+
+    def _reap_panel(self) -> None:
+        """Detect if the panel child exited on its own (user closed window)."""
+        proc = self._panel_proc
+        if proc is not None and proc.poll() is not None:
+            self._panel_proc = None
+            self._panel_visible = False
 
     def _poll_session(self) -> None:
         try:
@@ -152,7 +150,7 @@ class _SignalLightApp:
                 self._signal_started_at = time.monotonic()
 
         self._update_icon(aggregate)
-        self._update_panel(aggregate, snapshot)
+        self._push_panel_update(aggregate, snapshot)
 
     def _update_icon(self, aggregate: str) -> None:
         signal = SIGNALS.get(aggregate)
@@ -173,220 +171,104 @@ class _SignalLightApp:
 
         self._app.icon = str(get_icon_path(self._icons, color, brightness))
 
-    def _update_panel(self, aggregate: str, snapshot: dict) -> None:
-        panel = self._panel
-        if panel is None:
+    def _push_panel_update(self, aggregate: str, snapshot: dict) -> None:
+        if self._panel_proc is None or not self._panel_visible:
             return
         try:
-            signal = SIGNALS.get(aggregate)
-            frame: Frame | None = None
-            if signal and signal.repeat and signal.frames:
-                elapsed = time.monotonic() - self._signal_started_at
-                _, frame = compute_current_frame(elapsed, signal.frames)
-            elif signal and signal.leave_on is not None:
-                frame = Frame(
-                    green=signal.leave_on[0],
-                    yellow=signal.leave_on[1],
-                    red=signal.leave_on[2],
-                )
-            panel.update(aggregate, frame, snapshot)
+            self._send_panel_cmd(self._build_panel_cmd(aggregate, snapshot))
         except Exception:
             pass
 
-    # ---- tkinter pump (main thread, driven by rumps timer) --------------
+    def _build_panel_cmd(self, aggregate: str, snapshot: dict) -> dict:
+        """Build a JSON-serialisable update command for the panel subprocess.
 
-    def _pump_tk(self) -> None:
-        """Process pending tkinter events — called every timer tick."""
-        root = self._tk_root
-        if root is None:
+        Sends signal metadata and timing info so the subprocess can compute
+        the flash state locally using the same algorithm as the icon.
+        """
+        signal = SIGNALS.get(aggregate)
+        started_at = self._signal_started_at  # time.monotonic() value
+
+        # Static leave_on state for non-repeating signals.
+        leave_on: list[str] = []
+        if signal and not signal.repeat and signal.leave_on is not None:
+            if signal.leave_on[0]:
+                leave_on.append("green")
+            if signal.leave_on[1]:
+                leave_on.append("yellow")
+            if signal.leave_on[2]:
+                leave_on.append("red")
+
+        summary = signal.summary if signal else ""
+        sessions = snapshot.get("sessions", {})
+        count = len(sessions) if isinstance(sessions, dict) else 0
+        return {
+            "action": "update",
+            "signal": aggregate,
+            "repeat": bool(signal and signal.repeat and signal.frames),
+            "flash_color": ICON_COLOR_MAP.get(aggregate, "grey"),
+            "started_at": started_at,
+            "poll_interval": POLL_INTERVAL,
+            "leave_on": leave_on,
+            "summary": summary,
+            "sessions": count,
+        }
+
+    # ---- panel child process management ---------------------------------
+
+    def _send_panel_cmd(self, cmd: dict) -> None:
+        proc = self._panel_proc
+        if proc is None or proc.poll() is not None:
             return
         try:
-            root.update()
+            proc.stdin.write((json.dumps(cmd) + "\n").encode())
+            proc.stdin.flush()
         except Exception:
-            self._tk_root = None
-            self._panel = None
+            pass
+
+    def _spawn_panel(self) -> None:
+        if self._panel_proc is not None and self._panel_proc.poll() is None:
+            return
+        self._panel_proc = subprocess.Popen(
+            [sys.executable, "-m", "signal_light.gui._panel_process"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     # ---- panel toggle ---------------------------------------------------
 
     def _on_toggle_panel(self, _sender: Any = None) -> None:
-        if self._panel is not None and self._panel.is_visible:
+        if self._panel_visible:
             self._hide_panel()
             return
-        self._ensure_tk()
         self._show_panel()
 
-    def _ensure_tk(self) -> None:
-        if self._tk_root is not None:
-            return
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.withdraw()
-        self._tk_root = root
-        self._panel = _DetailPanel(root)
-
     def _show_panel(self) -> None:
-        if self._panel is None:
-            return
-        self._panel.show()
+        self._spawn_panel()
+        # Send show with current state so the panel is never blank.
+        try:
+            snapshot = read_session_snapshot()
+            aggregate = snapshot.get("aggregate", "idle")
+            cmd = self._build_panel_cmd(aggregate, snapshot)
+            cmd["action"] = "show"
+            self._send_panel_cmd(cmd)
+        except Exception:
+            self._send_panel_cmd({"action": "show"})
+        self._panel_visible = True
 
     def _hide_panel(self) -> None:
-        if self._panel is not None:
-            self._panel.hide()
+        self._send_panel_cmd({"action": "hide"})
+        self._panel_visible = False
 
     # ---- quit -----------------------------------------------------------
 
     def _on_quit(self, _sender: Any = None) -> None:
-        if self._panel is not None:
-            self._panel.destroy()
-            self._panel = None
-        if self._tk_root is not None:
+        proc = self._panel_proc
+        if proc is not None and proc.poll() is None:
             try:
-                self._tk_root.destroy()
+                self._send_panel_cmd({"action": "quit"})
+                proc.wait(timeout=2)
             except Exception:
-                pass
-            self._tk_root = None
+                proc.kill()
+            self._panel_proc = None
         self._rumps.quit_application()
-
-
-# ---------------------------------------------------------------------------
-# Floating detail panel (tkinter, driven from main thread)
-# ---------------------------------------------------------------------------
-
-class _DetailPanel:
-    """Small floating window that visualises the traffic light and session state."""
-
-    _PANEL_W = 260
-    _PANEL_H = 340
-    _LIGHT_R = 20
-    _LIGHT_GAP = 16
-    _LIGHT_X = 50
-
-    _ACTIVE_COLORS: dict[str, str] = {"green": "#4CAF50", "yellow": "#FFC107", "red": "#F44336"}
-    _DIM_COLOR = "#3A3A3A"
-
-    def __init__(self, root: Any) -> None:
-        import tkinter as tk
-
-        self._root = root
-        self._visible = False
-
-        self._win = tk.Toplevel(root)
-        self._win.title("Signal Light")
-        self._win.attributes("-topmost", True)
-        try:
-            self._win.attributes("-alpha", 0.95)
-        except Exception:
-            pass
-        self._win.configure(bg="#1E1E1E")
-        self._win.geometry(f"{self._PANEL_W}x{self._PANEL_H}")
-        self._win.withdraw()
-
-        self._win.protocol("WM_DELETE_WINDOW", self.hide)
-
-        # ---- traffic light canvas ----
-        self._canvas = tk.Canvas(
-            self._win,
-            width=self._LIGHT_X * 2,
-            height=self._PANEL_H - 100,
-            bg="#1E1E1E",
-            highlightthickness=0,
-        )
-        self._canvas.pack(pady=(16, 4))
-
-        cx = self._LIGHT_X
-        self._oval_ids: dict[str, int] = {}
-        y = 30
-        for color in ("red", "yellow", "green"):
-            oid = self._canvas.create_oval(
-                cx - self._LIGHT_R, y - self._LIGHT_R,
-                cx + self._LIGHT_R, y + self._LIGHT_R,
-                fill=self._DIM_COLOR, outline="#555555", width=2,
-            )
-            self._oval_ids[color] = oid
-            y += self._LIGHT_R * 2 + self._LIGHT_GAP
-
-        # ---- labels ----
-        self._signal_label = tk.Label(
-            self._win, text="—", fg="#CCCCCC", bg="#1E1E1E",
-            font=("SF Pro Text", 16, "bold"),
-        )
-        self._signal_label.pack(anchor="w", padx=16, pady=(8, 0))
-
-        self._summary_label = tk.Label(
-            self._win, text="", fg="#999999", bg="#1E1E1E",
-            font=("SF Pro Text", 11), wraplength=self._PANEL_W - 32, justify="left",
-        )
-        self._summary_label.pack(anchor="w", padx=16)
-
-        self._session_label = tk.Label(
-            self._win, text="", fg="#777777", bg="#1E1E1E",
-            font=("SF Pro Text", 10), wraplength=self._PANEL_W - 32, justify="left",
-        )
-        self._session_label.pack(anchor="w", padx=16, pady=(12, 0))
-
-    # ---- public API -----------------------------------------------------
-
-    @property
-    def is_visible(self) -> bool:
-        return self._visible
-
-    def show(self) -> None:
-        self._position()
-        self._win.deiconify()
-        self._win.lift()
-        self._visible = True
-
-    def hide(self) -> None:
-        self._win.withdraw()
-        self._visible = False
-
-    def destroy(self) -> None:
-        try:
-            self._win.destroy()
-        except Exception:
-            pass
-
-    def update(self, aggregate: str, frame: Frame | None, snapshot: dict) -> None:
-        signal = SIGNALS.get(aggregate)
-        # Traffic light circles.
-        for color, oid in self._oval_ids.items():
-            if frame is not None and _frame_has_color(frame, color):
-                self._canvas.itemconfig(oid, fill=self._ACTIVE_COLORS[color])
-            else:
-                self._canvas.itemconfig(oid, fill=self._DIM_COLOR)
-
-        # Signal name.
-        display = aggregate.replace("_", " ").title()
-        self._signal_label.config(text=display)
-
-        # Summary text.
-        summary = signal.summary if signal else ""
-        self._summary_label.config(text=summary)
-
-        # Session count.
-        sessions = snapshot.get("sessions", {})
-        count = len(sessions) if isinstance(sessions, dict) else 0
-        self._session_label.config(text=f"Active sessions: {count}")
-
-    # ---- private helpers ------------------------------------------------
-
-    def _position(self) -> None:
-        try:
-            screen_w = self._root.winfo_screenwidth()
-            screen_h = self._root.winfo_screenheight()
-            x = screen_w - self._PANEL_W - 20
-            y = min(32, screen_h - self._PANEL_H - 20)
-            self._win.geometry(f"+{x}+{y}")
-        except Exception:
-            pass
-
-
-def _frame_has_color(frame: Frame, color: str) -> bool:
-    if color == "green":
-        return frame.green
-    if color == "yellow":
-        return frame.yellow
-    if color == "red":
-        return frame.red
-    return False

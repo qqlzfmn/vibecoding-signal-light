@@ -10,13 +10,7 @@ import struct
 import zlib
 from pathlib import Path
 
-# Material Design inspired palette.
-COLORS: dict[str, tuple[int, int, int]] = {
-    "green": (76, 175, 80),
-    "yellow": (255, 193, 7),
-    "red": (244, 67, 54),
-    "grey": (158, 158, 158),
-}
+from signal_light.gui.const import COLORS
 
 BRIGHTNESS_LEVELS: list[float] = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
 
