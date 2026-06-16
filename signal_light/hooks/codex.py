@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from signal_light.agent_signals import SIGNALS
+from signal_light.signals import SIGNALS
 
 
 EVENT_TO_SIGNAL = {
@@ -119,6 +119,22 @@ def session_key(hook_input: CodexHookInput, environ: Mapping[str, str]) -> str:
     return "global"
 
 
+def main() -> int:
+    hook_input = read_codex_hook_input(sys.argv, sys.stdin.read(), os.environ)
+    signal = choose_signal(hook_input)
+    key = session_key(hook_input, os.environ)
+
+    from signal_light.session import apply_session_signal
+
+    aggregate = apply_session_signal(key, signal)
+    print(f"Session {key}: {signal}; aggregate={aggregate}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
 def _event_from_args(argv: list[str]) -> str | None:
     for index, value in enumerate(argv):
         if value in {"--event", "-e"} and index + 1 < len(argv):
@@ -213,21 +229,3 @@ def _failure_marker_from_value(value: Any) -> str | None:
                 return marker
         return "error"
     return "error"
-
-
-def main() -> int:
-    hook_input = read_codex_hook_input(sys.argv, sys.stdin.read(), os.environ)
-    signal = choose_signal(hook_input)
-    key = session_key(hook_input, os.environ)
-
-    from signal_light.cli import play_hook_signal
-
-    return play_hook_signal(
-        signal_name=signal,
-        session_key=key,
-        quiet=True,
-    )
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

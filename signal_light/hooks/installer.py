@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Iterable, TextIO
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CODEX_HOOK_SCRIPT = PROJECT_ROOT / "scripts" / "codex-signal-hook"
-CLAUDE_CODE_HOOK_SCRIPT = PROJECT_ROOT / "scripts" / "claude-code-signal-hook"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_UV_BIN = shutil.which("uv") or "uv"
+CODEX_HOOK_CMD = f"{_UV_BIN} run --project {PROJECT_ROOT} signal-light codex-hook"
+CLAUDE_CODE_HOOK_CMD = f"{_UV_BIN} run --project {PROJECT_ROOT} signal-light claude-code-hook"
 
 CODEX_EVENTS = {
     "SessionStart": 5,
@@ -47,7 +48,7 @@ class AgentSpec:
     key: str
     name: str
     config_path: Path
-    hook_script: Path
+    hook_script: str
     events: dict[str, int]
     passes_event_arg: bool
     uses_matcher: bool = False
@@ -78,7 +79,7 @@ def supported_agents(home: Path | None = None) -> dict[str, AgentSpec]:
             key="codex",
             name="Codex",
             config_path=home_dir / ".codex" / "hooks.json",
-            hook_script=CODEX_HOOK_SCRIPT,
+            hook_script=CODEX_HOOK_CMD,
             events=CODEX_EVENTS,
             passes_event_arg=True,
         ),
@@ -86,7 +87,7 @@ def supported_agents(home: Path | None = None) -> dict[str, AgentSpec]:
             key="claude-code",
             name="Claude Code",
             config_path=home_dir / ".claude" / "settings.json",
-            hook_script=CLAUDE_CODE_HOOK_SCRIPT,
+            hook_script=CLAUDE_CODE_HOOK_CMD,
             events=CLAUDE_CODE_EVENTS,
             passes_event_arg=False,
             uses_matcher=True,
@@ -442,8 +443,9 @@ def _is_signal_light_command(command: object, spec: AgentSpec) -> bool:
     if not parts:
         return False
 
-    executable = Path(parts[0])
-    return executable.name == spec.hook_script.name and executable.parent.name == "scripts"
+    # Check if command contains signal-light hook invocation.
+    joined = " ".join(parts)
+    return "signal-light codex-hook" in joined or "signal-light claude-code-hook" in joined
 
 
 def _hook_group(spec: AgentSpec, event: str, timeout: int) -> dict[str, object]:
@@ -462,23 +464,25 @@ def _hook_group(spec: AgentSpec, event: str, timeout: int) -> dict[str, object]:
 
 
 def _hook_command(spec: AgentSpec, event: str) -> str:
-    quoted_script = shlex.quote(str(spec.hook_script))
     if spec.passes_event_arg:
-        return f"{quoted_script} {event}"
-    return quoted_script
+        return f"{spec.hook_script} {event}"
+    return spec.hook_script
 
 
 def _offer_gui_install(out: TextIO, input_stream: TextIO, yes: bool) -> None:
-    try:
-        import rumps  # noqa: F401
-    except ImportError:
-        return
+    project_root = Path(__file__).resolve().parents[2]
+    app_bundle = project_root / "SignalLightApp" / ".build" / "SignalLightApp.app"
+    if not app_bundle.exists():
+        home_bundle = Path.home() / "Applications" / "SignalLightApp.app"
+        sys_bundle = Path("/Applications/SignalLightApp.app")
+        if not home_bundle.exists() and not sys_bundle.exists():
+            return
 
     if yes:
         answer = "y"
     else:
         print("", file=out)
-        print("Install macOS menu bar app? [y/N]: ", end="", file=out)
+        print("Launch the macOS menu bar app now? [y/N]: ", end="", file=out)
         out.flush()
         answer = input_stream.readline().strip().lower()
 
@@ -486,9 +490,20 @@ def _offer_gui_install(out: TextIO, input_stream: TextIO, yes: bool) -> None:
         return
 
     try:
-        from signal_light.gui.launchd import install_plist
-        from signal_light.runtime import PROJECT_ROOT, STATE_DIR
-        path = install_plist(PROJECT_ROOT, STATE_DIR)
-        print(f"GUI daemon installed: {path}", file=out)
+        import subprocess
+
+        bundle = app_bundle if app_bundle.exists() else (
+            Path.home() / "Applications" / "SignalLightApp.app"
+        )
+        if not bundle.exists():
+            bundle = Path("/Applications/SignalLightApp.app")
+
+        subprocess.Popen(
+            ["open", str(bundle)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print("Menu bar app launched. It will manage its own auto-start.", file=out)
     except Exception as exc:
-        print(f"Failed to install GUI daemon: {exc}", file=out)
+        print(f"Failed to launch app: {exc}", file=out)

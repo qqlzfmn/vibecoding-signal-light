@@ -66,11 +66,8 @@ When a tracked session ends, the runtime briefly flashes green to make the compl
 ## Try It
 
 ```bash
-./scripts/signal-light list
-./scripts/signal-light gui status
+uv run signal-light status
 ```
-
-The wrapper scripts avoid writing `__pycache__` files in the repository. By default they use `.venv/bin/python` when it exists, then fall back to `python3`. Set `SIGNAL_LIGHT_USE_UV=1` if you want the wrappers to run through `uv run`.
 
 ## Claude Code Hook Mapping
 
@@ -93,7 +90,7 @@ If `Stop` carries a `stop_reason` of `max_tokens` or `error`, the adapter uses `
 
 ## Claude Code settings.json Example
 
-Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
+Run `uv run signal-light install-hooks --agent claude-code` to install automatically, or add hooks manually to `~/.claude/settings.json`:
 
 ```json
 {
@@ -103,7 +100,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -115,7 +112,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -127,7 +124,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -139,7 +136,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -151,7 +148,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -163,7 +160,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 10
           }
         ],
@@ -175,7 +172,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -187,7 +184,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -199,7 +196,7 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/claude-code-signal-hook",
+            "command": "uv run signal-light claude-code-hook",
             "timeout": 5
           }
         ],
@@ -210,11 +207,11 @@ Add hooks to `~/.claude/settings.json` (or project `.claude/settings.json`):
 }
 ```
 
-Note: Unlike Codex hooks where the event name must be passed as an argument, Claude Code passes the event as JSON on stdin, so the hook command does not need an event argument.
+Note: Claude Code passes the event as JSON on stdin, so the hook command does not need an event argument.
 
 ## Codex hooks.json Example
 
-Add command hooks like this to `~/.codex/hooks.json`, keeping any existing hooks you already use:
+Run `uv run signal-light install-hooks --agent codex` to install automatically, or add hooks manually to `~/.codex/hooks.json`:
 
 ```json
 {
@@ -224,7 +221,7 @@ Add command hooks like this to `~/.codex/hooks.json`, keeping any existing hooks
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/codex-signal-hook UserPromptSubmit",
+            "command": "uv run signal-light codex-hook UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -235,7 +232,7 @@ Add command hooks like this to `~/.codex/hooks.json`, keeping any existing hooks
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/codex-signal-hook PreToolUse",
+            "command": "uv run signal-light codex-hook PreToolUse",
             "timeout": 5
           }
         ]
@@ -246,7 +243,7 @@ Add command hooks like this to `~/.codex/hooks.json`, keeping any existing hooks
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/codex-signal-hook PermissionRequest",
+            "command": "uv run signal-light codex-hook PermissionRequest",
             "timeout": 10
           }
         ]
@@ -257,7 +254,7 @@ Add command hooks like this to `~/.codex/hooks.json`, keeping any existing hooks
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/liusixian/Develop/starlight36/signal-light/scripts/codex-signal-hook Stop",
+            "command": "uv run signal-light codex-hook Stop",
             "timeout": 5
           }
         ]

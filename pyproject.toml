@@ -22,11 +22,6 @@ classifiers = [
 ]
 dependencies = []
 
-[project.optional-dependencies]
-gui = [
-    "rumps>=0.4.0",
-]
-
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
@@ -34,8 +29,8 @@ dev = [
 
 [project.scripts]
 signal-light = "signal_light.cli:main"
-codex-signal-hook = "signal_light.codex_hook:main"
-claude-code-signal-hook = "signal_light.claude_code_hook:main"
+codex-signal-hook = "signal_light.hooks.codex:main"
+claude-code-signal-hook = "signal_light.hooks.claude_code:main"
 
 [project.urls]
 Homepage = "https://github.com/starlight36/vibecoding-signal-light"
@@ -44,3 +39,7 @@ Issues = "https://github.com/starlight36/vibecoding-signal-light/issues"
 
 [tool.uv]
 package = true
+
+[tool.setuptools.packages.find]
+include = ["signal_light*"]
+exclude = ["SignalLightApp*", "tests*", "scripts*", "docs*"]

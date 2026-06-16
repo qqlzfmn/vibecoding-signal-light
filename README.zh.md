@@ -42,50 +42,35 @@ AI 编程助手越来越能自己跑命令、改文件、开子任务，但它�
 
 ## 快速开始
 
-安装依赖（使用 `uv`）：
-
 ```bash
-uv sync                              # 仅核心
-uv sync --extra gui                  # 含 macOS 菜单栏
+uv sync                                          # 安装 Python 依赖
+cd SignalLightApp && ./build.sh && cd ..          # 构建 macOS 菜单栏应用
+open SignalLightApp/.build/SignalLightApp.app     # 启动
 ```
 
-查看灯语列表：
+应用在菜单栏运行，右键点击可查看详情或退出。首次启动会自动配置 launchd 开机自启。
 
-```bash
-./scripts/signal-light list
-```
-
-### macOS 菜单栏应用
-
-启动软件信号灯（菜单栏图标）：
-
-```bash
-uv run python -m signal_light gui start     # 启动菜单栏守护进程
-uv run python -m signal_light gui stop      # 停止（下次登录自动启动）
-uv run python -m signal_light gui status    # 查看当前状态
-uv run python -m signal_light gui install   # 安装开机自启
-uv run python -m signal_light gui uninstall # 移除开机自启
-```
-
-## Codex 集成
+### Hook 安装
 
 安装或修复本地 hook 最简单的方式是内置向导：
 
 ```bash
-./scripts/install-hooks
-./scripts/install-hooks --all -y
-./scripts/install-hooks --agent codex --agent claude-code -y
+uv run signal-light install-hooks
+uv run signal-light install-hooks --all -y
+uv run signal-light install-hooks --agent codex --agent claude-code -y
 ```
 
 向导会识别已支持的 Agent，检查当前 hook 文件，写入前创建带时间戳的备份，并且只安装 Signal Light 自己的 hook 条目，保留同一事件下已有的其它 hook。
 
-Codex hook 可以直接把事件名传给 wrapper：
+## Codex 集成
+
+Codex hook 通过事件名调用：
 
 ```bash
-./scripts/codex-signal-hook UserPromptSubmit
-./scripts/codex-signal-hook PreToolUse
-./scripts/codex-signal-hook PermissionRequest
-./scripts/codex-signal-hook Stop
+uv run signal-light codex-hook UserPromptSubmit
+uv run signal-light codex-hook PreToolUse
+uv run signal-light codex-hook PermissionRequest
+uv run signal-light codex-hook Stop
 ```
 
 推荐映射：
@@ -104,12 +89,12 @@ Codex hook 可以直接把事件名传给 wrapper：
 
 ## Claude Code 集成
 
-Claude Code 会通过 stdin 传入 JSON hook 数据，因此 wrapper 通常不需要额外参数：
+Claude Code 通过 stdin 传入 JSON hook 数据，不需要额外参数：
 
 ```bash
-echo '{"event":"PreToolUse","session_id":"demo"}' | ./scripts/claude-code-signal-hook
-echo '{"event":"PermissionRequest","session_id":"demo"}' | ./scripts/claude-code-signal-hook
-echo '{"event":"Notification","session_id":"demo"}' | ./scripts/claude-code-signal-hook
+echo '{"event":"PreToolUse","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"PermissionRequest","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"Notification","session_id":"demo"}' | uv run signal-light claude-code-hook
 ```
 
 支持的 Claude Code 事件包括：

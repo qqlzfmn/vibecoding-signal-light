@@ -45,50 +45,35 @@ The language is intentionally small and persistent. The current light should alw
 
 ## Quick Start
 
-Install dependencies with your preferred Python workflow. With `uv`:
-
 ```bash
-uv sync                              # Core only
-uv sync --extra gui                  # With macOS menu bar support
+uv sync                                          # Install Python dependencies
+cd SignalLightApp && ./build.sh && cd ..          # Build macOS menu bar app
+open SignalLightApp/.build/SignalLightApp.app     # Launch
 ```
 
-List the signal language:
+The app lives in the menu bar. Right-click to show details or quit. It writes its own launchd plist for auto-start on first launch.
 
-```bash
-./scripts/signal-light list
-```
-
-### macOS Menu Bar App
-
-Start the software signal light in the macOS menu bar:
-
-```bash
-uv run python -m signal_light gui start     # Start the menu bar daemon
-uv run python -m signal_light gui stop      # Stop until next login
-uv run python -m signal_light gui status    # Check current state
-uv run python -m signal_light gui install   # Auto-start on login
-uv run python -m signal_light gui uninstall # Remove auto-start
-```
-
-## Codex Integration
+### Hook Installation
 
 The easiest way to install or repair local hooks is the built-in wizard:
 
 ```bash
-./scripts/install-hooks
-./scripts/install-hooks --all -y
-./scripts/install-hooks --agent codex --agent claude-code -y
+uv run signal-light install-hooks
+uv run signal-light install-hooks --all -y
+uv run signal-light install-hooks --agent codex --agent claude-code -y
 ```
 
 The wizard detects supported local agents, validates the current hook files, creates timestamped backups, and installs only the Signal Light hook entries while keeping other hooks on the same events.
 
-Codex hooks can call the wrapper with the event name:
+## Codex Integration
+
+Codex hooks are invoked with the event name:
 
 ```bash
-./scripts/codex-signal-hook UserPromptSubmit
-./scripts/codex-signal-hook PreToolUse
-./scripts/codex-signal-hook PermissionRequest
-./scripts/codex-signal-hook Stop
+uv run signal-light codex-hook UserPromptSubmit
+uv run signal-light codex-hook PreToolUse
+uv run signal-light codex-hook PermissionRequest
+uv run signal-light codex-hook Stop
 ```
 
 Recommended hook mapping:
@@ -107,12 +92,12 @@ See [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md) for a complete `~/.codex/hook
 
 ## Claude Code Integration
 
-Claude Code sends hook data as JSON on stdin, so the wrapper usually needs no event argument:
+Claude Code sends hook data as JSON on stdin, so no event argument is needed:
 
 ```bash
-echo '{"event":"PreToolUse","session_id":"demo"}' | ./scripts/claude-code-signal-hook
-echo '{"event":"PermissionRequest","session_id":"demo"}' | ./scripts/claude-code-signal-hook
-echo '{"event":"Notification","session_id":"demo"}' | ./scripts/claude-code-signal-hook
+echo '{"event":"PreToolUse","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"PermissionRequest","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"Notification","session_id":"demo"}' | uv run signal-light claude-code-hook
 ```
 
 Supported Claude Code events include:
