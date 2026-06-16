@@ -171,6 +171,16 @@ class _DetailPanel:
 def main() -> None:
     root = tk.Tk()
     root.withdraw()
+
+    # Hide the Dock icon — tell macOS this is a background-only app.
+    try:
+        import AppKit
+        AppKit.NSApplication.sharedApplication().setActivationPolicy_(
+            AppKit.NSApplicationActivationPolicyAccessory,
+        )
+    except Exception:
+        pass
+
     panel = _DetailPanel(root)
 
     def _process_stdin() -> None:
