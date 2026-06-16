@@ -51,11 +51,9 @@ The CLI still exposes named signals so hooks and other agents can use stable wor
 
 If the hook payload reports failure through structured fields such as `status`, `state`, `error`, `failure`, `exception`, or a non-zero `exit_status`, the adapter uses `blocked`, which starts flashing the red light.
 
-Animated states are persistent. The command starts a small background worker and returns immediately, which keeps Codex hooks fast. The next steady state stops the worker before setting its own light. `Stop` is treated as the end of a normal turn, so it clears working state instead of flashing yellow after every response.
+`Stop` is treated as the end of a normal turn, so it clears working state instead of flashing yellow after every response.
 
-The work state uses a simple green flash. The work flash includes brightness levels for drivers that can dim LEDs. The current MCP2221A GPIO driver uses plain on/off output instead of software PWM, because USB GPIO timing makes simulated dimming visibly flicker.
-
-Codex hook state is session-aware. Each session stores its own latest signal, then the physical light shows the highest-priority aggregate:
+Codex hook state is session-aware. Each session stores its own latest signal, then the menu bar shows the highest-priority aggregate:
 
 ```text
 flashing red > flashing yellow > flashing green (work) > steady green
@@ -65,49 +63,12 @@ For example, if one Codex session is waiting for permission and another session 
 
 When a tracked session ends, the runtime briefly flashes green to make the completion visible. After that cue, it recomputes the aggregate: if other sessions are still working, the green flash resumes; if no sessions remain, the light settles on steady green. Red and yellow alerts stay higher priority, so the green completion cue does not interrupt an active permission, blocked, attention, or done state.
 
-## Wiring Defaults
-
-The CLI assumes active-low MCP2221A GPIO wiring:
-
-- `gp0`: green
-- `gp1`: yellow
-- `gp2`: red
-- GPIO `LOW`: light on
-- GPIO `HIGH`: light off
-
-Override these with environment variables:
-
-```bash
-export SIGNAL_LIGHT_GREEN_PIN=gp0
-export SIGNAL_LIGHT_YELLOW_PIN=gp1
-export SIGNAL_LIGHT_RED_PIN=gp2
-export SIGNAL_LIGHT_ACTIVE_LOW=1
-```
-
-Set `SIGNAL_LIGHT_ACTIVE_LOW=0` if your signal model is wired active-high.
-
-## Try It Without Hardware
+## Try It
 
 ```bash
 ./scripts/signal-light list
-./scripts/signal-light play working --dry-run
-./scripts/signal-light play attention --dry-run
-./scripts/signal-light codex-hook PermissionRequest --dry-run
+./scripts/signal-light gui status
 ```
-
-## Try It With Hardware
-
-```bash
-./scripts/signal-light test
-./scripts/signal-light play working
-./scripts/signal-light play attention
-./scripts/signal-light play permission
-./scripts/signal-light play idle
-./scripts/signal-light play off
-./scripts/signal-light status
-```
-
-If the wrong light turns on, adjust `SIGNAL_LIGHT_*_PIN`. If lights are inverted, adjust `SIGNAL_LIGHT_ACTIVE_LOW`.
 
 The wrapper scripts avoid writing `__pycache__` files in the repository. By default they use `.venv/bin/python` when it exists, then fall back to `python3`. Set `SIGNAL_LIGHT_USE_UV=1` if you want the wrappers to run through `uv run`.
 

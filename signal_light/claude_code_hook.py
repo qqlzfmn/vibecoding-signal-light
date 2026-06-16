@@ -106,7 +106,6 @@ def main() -> int:
     return play_hook_signal(
         signal_name=signal,
         session_key=key,
-        dry_run=os.environ.get("SIGNAL_LIGHT_DRY_RUN", "").strip().lower() in {"1", "true", "yes", "on"},
         quiet=True,
     )
 

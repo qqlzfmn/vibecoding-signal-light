@@ -8,31 +8,15 @@ import os
 import sys
 from typing import Sequence
 
-from signal_light.agent_signals import SIGNALS, AgentSignal, Frame
-from signal_light.hardware import LightMapping, SignalLight, SignalLightError
+from signal_light.agent_signals import SIGNALS
 from signal_light.runtime import (
-    IDLE_SLEEP_SIGNAL,
-    SESSION_END_NOTICE_SIGNAL,
     apply_session_signal,
-    apply_signal,
     clear_session_state,
     read_session_snapshot,
-    run_worker,
 )
 
 
 HOOK_CONTROL_SIGNALS = {"turn_end"}
-
-
-class DryRunLight:
-    def write(self, *, green: bool = False, yellow: bool = False, red: bool = False) -> None:
-        print(f"green={int(green)} yellow={int(yellow)} red={int(red)}")
-
-    def write_brightness(self, *, green: float = 0.0, yellow: float = 0.0, red: float = 0.0) -> None:
-        print(f"green={green:.2f} yellow={yellow:.2f} red={red:.2f}")
-
-    def off(self) -> None:
-        self.write()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,7 +28,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     play = subparsers.add_parser("play", help="play one lamp-language signal")
     play.add_argument("signal", choices=sorted(SIGNALS), help="signal name")
-    play.add_argument("--dry-run", action="store_true", help="print GPIO states instead of touching hardware")
     play.add_argument("--speed", type=float, default=1.0, help="delay multiplier; lower is faster")
     play.add_argument("--quiet", action="store_true", help="suppress non-error output")
 
@@ -66,29 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
     hook = subparsers.add_parser("codex-hook", help="read a Codex hook event and play the matching signal")
     hook.add_argument("event", nargs="?", help="Codex hook event name, for example Stop or PermissionRequest")
     hook.add_argument("--event", dest="event_option", help="Codex hook event name")
-    hook.add_argument("--dry-run", action="store_true", help="print GPIO states instead of touching hardware")
 
     cc_hook = subparsers.add_parser("claude-code-hook", help="read a Claude Code hook event and play the matching signal")
     cc_hook.add_argument("event", nargs="?", help="Claude Code hook event name, for example Stop or PreToolUse")
     cc_hook.add_argument("--event", dest="event_option", help="Claude Code hook event name")
-    cc_hook.add_argument("--dry-run", action="store_true", help="print GPIO states instead of touching hardware")
-
-    worker = subparsers.add_parser("worker", help=argparse.SUPPRESS)
-    worker.add_argument(
-        "signal",
-        choices=sorted(
-            {
-                *(name for name, signal in SIGNALS.items() if signal.repeat),
-                SESSION_END_NOTICE_SIGNAL,
-                IDLE_SLEEP_SIGNAL,
-            }
-        ),
-    )
-    worker.add_argument("--owner-token", help=argparse.SUPPRESS)
-    worker.add_argument("--speed", type=float, default=1.0)
-
-    test = subparsers.add_parser("test", help="run a quick red/yellow/green hardware test")
-    test.add_argument("--dry-run", action="store_true", help="print GPIO states instead of touching hardware")
 
     gui = subparsers.add_parser("gui", help="manage the macOS menu bar status app")
     gui.add_argument(
@@ -111,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "list":
         return list_signals()
     if args.command == "play":
-        return play_signal(args.signal, dry_run=args.dry_run, speed=args.speed, quiet=args.quiet)
+        return play_signal(args.signal, speed=args.speed, quiet=args.quiet)
     if args.command == "install-hooks":
         from signal_light.hook_installer import run_install_wizard
 
@@ -134,7 +98,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         hook_input = read_codex_hook_input(hook_argv, sys.stdin.read(), os.environ)
         signal = choose_signal(hook_input)
         key = session_key(hook_input, os.environ)
-        return play_hook_signal(signal, session_key=key, dry_run=args.dry_run, quiet=True)
+        return play_hook_signal(signal, session_key=key, quiet=True)
     if args.command == "claude-code-hook":
         event = args.event_option or args.event
         from signal_light.claude_code_hook import choose_signal as cc_choose_signal
@@ -144,14 +108,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         hook_input = read_hook_input(hook_argv, sys.stdin.read())
         signal = cc_choose_signal(hook_input)
         key = cc_session_key(hook_input, os.environ)
-        return play_hook_signal(signal, session_key=key, dry_run=args.dry_run, quiet=True)
+        return play_hook_signal(signal, session_key=key, quiet=True)
     if args.command == "status":
         print(json.dumps(read_session_snapshot(), ensure_ascii=False, indent=2))
         return 0
-    if args.command == "test":
-        return run_test(dry_run=args.dry_run)
-    if args.command == "worker":
-        return run_worker(args.signal, speed=args.speed)
     if args.command == "gui":
         return run_gui_action(args.action)
     if args.command == "gui-daemon":
@@ -169,7 +129,7 @@ def list_signals() -> int:
     return 0
 
 
-def play_signal(signal_name: str, *, dry_run: bool = False, speed: float = 1.0, quiet: bool = False) -> int:
+def play_signal(signal_name: str, *, speed: float = 1.0, quiet: bool = False) -> int:
     signal = SIGNALS.get(signal_name)
     if signal is None:
         if not quiet:
@@ -179,20 +139,8 @@ def play_signal(signal_name: str, *, dry_run: bool = False, speed: float = 1.0, 
     if not quiet:
         print(f"Playing {signal.name}: {signal.summary}")
 
-    try:
-        if dry_run:
-            if signal.repeat:
-                _preview_repeating_signal(signal, speed=speed)
-            else:
-                signal.play(DryRunLight(), speed=speed)
-        else:
-            if signal.name in {"idle", "off"}:
-                clear_session_state()
-            apply_signal(signal, speed=speed)
-    except SignalLightError as exc:
-        if not quiet:
-            print(str(exc), file=sys.stderr)
-        return 1
+    if signal_name in {"idle", "off"}:
+        clear_session_state()
 
     return 0
 
@@ -201,7 +149,6 @@ def play_hook_signal(
     signal_name: str,
     *,
     session_key: str,
-    dry_run: bool = False,
     speed: float = 1.0,
     quiet: bool = False,
 ) -> int:
@@ -211,57 +158,15 @@ def play_hook_signal(
             print(f"Unknown signal: {signal_name}", file=sys.stderr)
         return 2
 
-    if dry_run:
-        if not quiet:
-            print(f"Session {session_key}: {signal_name}")
-        if signal is None:
-            return 0
-        if signal.repeat:
-            _preview_repeating_signal(signal, speed=speed)
-        else:
-            signal.play(DryRunLight(), speed=speed)
-        return 0
-
     try:
         aggregate = apply_session_signal(session_key, signal_name, speed=speed)
-    except SignalLightError as exc:
+    except Exception as exc:
         if not quiet:
             print(str(exc), file=sys.stderr)
         return 1
 
     if not quiet:
         print(f"Session {session_key}: {signal_name}; aggregate={aggregate}")
-    return 0
-
-
-def _preview_repeating_signal(signal: AgentSignal, *, speed: float) -> None:
-    signal.play(DryRunLight(), speed=speed, cycles=2)
-
-
-def run_test(*, dry_run: bool = False) -> int:
-    test_signal = AgentSignal(
-        name="test",
-        summary="red/yellow/green wiring test",
-        attention="",
-        frames=(
-            Frame(red=True, seconds=0.35),
-            Frame(yellow=True, seconds=0.35),
-            Frame(green=True, seconds=0.35),
-            Frame(red=True, yellow=True, green=True, seconds=0.35),
-        ),
-        loops=2,
-    )
-
-    try:
-        if dry_run:
-            test_signal.play(DryRunLight())
-        else:
-            with SignalLight(LightMapping.from_env(os.environ)) as light:
-                test_signal.play(light)
-    except SignalLightError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-
     return 0
 
 
@@ -279,8 +184,7 @@ def run_gui_action(action: str) -> int:
         except ImportError:
             print(
                 "Error: 'rumps' is not installed. Install the GUI extras first:\n"
-                "  uv sync --extra gui\n"
-                "  # or: uv sync --extra all",
+                "  uv sync --extra gui",
                 file=sys.stderr,
             )
             return 1
