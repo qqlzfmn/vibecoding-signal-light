@@ -4,64 +4,80 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Vibecoding Signal Light provides ambient status display for AI coding agents (Codex, Claude Code). It consists of two parts:
+Vibecoding Signal Light provides ambient status display for AI coding agents (Codex, Claude Code). It is a **single Swift macOS app** that serves both as a menu bar GUI and as a hook CLI for agents.
 
-- **Python package** — Hook adapters that map agent lifecycle events to a shared lamp language and manage session state in a JSON file.
-- **Swift macOS app** — Native menu bar app (`SignalLightApp/`) that reads session state and renders a colored icon + floating detail panel.
+The same binary operates in two modes:
+- **GUI mode** (no arguments) — Menu bar app that reads session state and renders a colored icon + floating detail panel.
+- **CLI mode** (`codex-hook`, `claude-code-hook`, `install-hooks`, `status`) — Runs as a hook command invoked by agents, writing session state to a shared JSON file.
 
-The two communicate via a shared JSON file (`/tmp/signal-light/sessions.json`). Python hooks write; the Swift app reads.
+Communication between agents and the GUI is via a shared JSON file (`/private/tmp/signal-light/sessions.json`).
 
 ## Commands
 
 ```bash
-# Python
-uv sync                              # Install Python dependencies
-uv run pytest -v                     # Run tests
-
-# Swift app
+# Build
 cd SignalLightApp && ./build.sh      # Build the macOS app
-open SignalLightApp/.build/SignalLightApp.app  # Launch
 
-# CLI
-uv run signal-light status                     # Show aggregated session state
-uv run signal-light install-hooks              # Install hooks
+# Launch GUI
 open SignalLightApp/.build/SignalLightApp.app  # Launch menu bar app
+
+# CLI (run the binary inside the app bundle)
+APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
+
+$APP status                     # Show aggregated session state
+$APP install-hooks --all --yes  # Install hooks for all agents
+$APP clear-state                # Clear all session state
+
+# Hook adapters (normally called by agents, not manually)
+echo '{"session_id":"abc"}' | $APP codex-hook Stop
+echo '{"session_id":"abc"}' | $APP claude-code-hook Stop
 ```
 
 There is no linter or formatter configured. No CI pipeline.
 
 ## Architecture
 
-### Python package (`signal_light/`)
+### Source layout (`SignalLightApp/Sources/SignalLightApp/`)
 
-- **`signals.py`** — Signal definitions: `Signal` dataclass (name + summary) and the `SIGNALS` dictionary (12 named signals). Pure data, no logic.
-- **`session.py`** — Session state management: `apply_session_signal()`, `aggregate_sessions()`, `read_session_snapshot()`, `clear_session_state()`. Uses `fcntl.flock` for concurrent access.
-- **`cli.py`** — argparse CLI with subcommands: `status`, `install-hooks`, `codex-hook`, `claude-code-hook`.
-- **`hooks/`** — Agent hook adapters:
-  - `codex.py` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection.
-  - `claude_code.py` — Same for Claude Code hooks (reads JSON from stdin). Supports `SubagentStart`/`SubagentStop`/`Notification`.
-  - `installer.py` — Interactive wizard that merges hook entries into `~/.codex/hooks.json` and `~/.claude/settings.json`.
+- **`App/`**
+  - `main.swift` — Entry point. Dispatches to CLI mode (hook/status/install-hooks) or launches NSApplication for GUI mode.
+  - `AppDelegate` — PID file, poller init, menu bar setup.
 
-### Swift app (`SignalLightApp/`)
+- **`Core/`** (hook adapters and session management)
+  - `SessionStore.swift` — Reads/writes `sessions.json` with `fcntl.flock` locking, TTL pruning, and priority-based aggregation.
+  - `CodexHookAdapter.swift` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection (error status, exit_status, tool_error).
+  - `ClaudeCodeHookAdapter.swift` — Maps Claude Code hook events to signal names. Supports `stop_reason` handling and `SubagentStart`/`SubagentStop`/`Notification`.
+  - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Handles merge with existing hooks and creates backups.
 
-- **`App/`** — `main.swift` entry point, `AppDelegate` (PID file, poller init).
-- **`Models/`** — `SessionState.swift` (Codable JSON model), `SignalDefinition.swift` (12 signals, color mapping, aggregate computation).
-- **`Services/`** — `SessionPoller.swift` (500ms Combine-based polling), `LaunchdManager.swift` (launchd plist).
-- **`Views/`** — `StatusBarController.swift` (NSStatusItem + flash animation), `DetailPanelWindow.swift` (floating NSPanel), `TrafficLightView.swift` (custom NSView circles).
+- **`Models/`**
+  - `SessionState.swift` — Codable JSON model matching the `sessions.json` format.
+  - `SignalDefinition.swift` — 12 signal definitions with color mapping, priority classification, and `aggregateSignal()` computation.
+
+- **`Services/`**
+  - `SessionPoller.swift` — 500ms Combine-based polling of `sessions.json`.
+  - `LaunchdManager.swift` — macOS launchd plist for auto-start on login.
+
+- **`Views/`**
+  - `StatusBarController.swift` — NSStatusItem with flash animation and right-click menu (Show Details, Install Hooks, Quit).
+  - `DetailPanelWindow.swift` — Floating NSPanel with traffic light animation.
+  - `TrafficLightView.swift` — Custom NSView drawing three colored circles (red/yellow/green).
 
 ### Key patterns
 
-- **JSON file as contract**: Hook processes write `sessions.json`; the Swift app reads it. No IPC needed.
-- **Multi-session aggregation**: `aggregate_sessions()` picks the highest-priority signal so urgent alerts (red/yellow) are never masked by normal activity.
-- **File-lock concurrency**: `_state_lock()` uses `fcntl.flock` for exclusive access across concurrent hook processes.
+- **Single binary, dual mode**: `main.swift` checks `CommandLine.arguments` — if a subcommand is present, it runs the CLI handler; otherwise it launches NSApplication.
+- **JSON file as contract**: The CLI writes `sessions.json`; the GUI reads it. No IPC needed.
+- **Multi-session aggregation**: `SessionStore.aggregateSessions()` picks the highest-priority signal so urgent alerts (red/yellow) are never masked by normal activity.
+- **File-lock concurrency**: `SessionStore.withLock()` uses `fcntl.flock(LOCK_EX)` for exclusive access across concurrent hook processes.
 
-### Entry points (defined in pyproject.toml)
+### Entry points (subcommands of the single binary)
 
-| Command | Target |
+| Subcommand | Handler |
 |---|---|
-| `signal-light` | `signal_light.cli:main` |
-| `codex-signal-hook` | `signal_light.hooks.codex:main` |
-| `claude-code-signal-hook` | `signal_light.hooks.claude_code:main` |
+| `codex-hook` | `CodexHookAdapter.run()` |
+| `claude-code-hook` | `ClaudeCodeHookAdapter.run()` |
+| `install-hooks` | `HookInstaller.installAgent()` |
+| `status` | `SessionStore.readSessionSnapshot()` |
+| `clear-state` | `SessionStore.clearSessionState()` |
 
 ### Environment variables
 
@@ -70,7 +86,3 @@ There is no linter or formatter configured. No CI pipeline.
 | `SIGNAL_LIGHT_STATE_DIR` | Session state directory | `/private/tmp/signal-light` |
 | `SIGNAL_LIGHT_SESSION_TTL_SECONDS` | Session expiry | `86400` |
 | `SIGNAL_LIGHT_GUI_POLL_MS` | GUI polling interval | `500` |
-
-## Testing
-
-Tests are in `tests/test_agent_signals.py`. They use `monkeypatch` extensively to mock file I/O, process management, and signal application.

@@ -38,6 +38,12 @@ final class StatusBarController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let installItem = NSMenuItem(title: "Install Hooks", action: #selector(installHooks), keyEquivalent: "")
+        installItem.target = self
+        menu.addItem(installItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -173,5 +179,36 @@ final class StatusBarController {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func installHooks() {
+        let agents = HookInstaller.Agent.allCases
+
+        // Run installation for all agents without interactive prompts.
+        var messages: [String] = []
+        for agent in agents {
+            let result = HookInstaller.installAgentAndReport(agent)
+            messages.append("\(agent.displayName): \(result.message)")
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Hooks Installed"
+        alert.informativeText = messages.joined(separator: "\n")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+
+        // Also offer to set up launchd auto-start.
+        if !LaunchdManager.isInstalled {
+            let launchAlert = NSAlert()
+            launchAlert.messageText = "Auto-start on login?"
+            launchAlert.informativeText = "Would you like Signal Light to start automatically when you log in?"
+            launchAlert.alertStyle = .informational
+            launchAlert.addButton(withTitle: "Yes")
+            launchAlert.addButton(withTitle: "Not Now")
+            if launchAlert.runModal() == .alertFirstButtonReturn {
+                try? LaunchdManager.install()
+            }
+        }
     }
 }
