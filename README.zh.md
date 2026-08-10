@@ -43,7 +43,6 @@ AI 编程助手越来越能自己跑命令、改文件、开子任务，但它�
 ## 快速开始
 
 ```bash
-uv sync                                          # 安装 Python 依赖
 cd SignalLightApp && ./build.sh && cd ..          # 构建 macOS 菜单栏应用
 open SignalLightApp/.build/SignalLightApp.app     # 启动
 ```
@@ -55,22 +54,25 @@ open SignalLightApp/.build/SignalLightApp.app     # 启动
 安装或修复本地 hook 最简单的方式是内置向导：
 
 ```bash
-uv run signal-light install-hooks
-uv run signal-light install-hooks --all -y
-uv run signal-light install-hooks --agent codex --agent claude-code -y
+# CLI 二进制（app bundle 内）
+APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
+
+$APP install-hooks                    # 交互式选择
+$APP install-hooks --all -y           # 安装全部 Agent
+$APP install-hooks --agent codex --agent claude-code -y
 ```
 
-向导会识别已支持的 Agent，检查当前 hook 文件，写入前创建带时间戳的备份，并且只安装 Signal Light 自己的 hook 条目，保留同一事件下已有的其它 hook。
+也可以右键菜单栏图标 → "Install Hooks" 子菜单，按 Agent 分别安装。向导会识别已支持的 Agent，检查当前 hook 文件，写入前创建带时间戳的备份，并且只安装 Signal Light 自己的 hook 条目，保留同一事件下已有的其它 hook。
 
 ## Codex 集成
 
 Codex hook 通过事件名调用：
 
 ```bash
-uv run signal-light codex-hook UserPromptSubmit
-uv run signal-light codex-hook PreToolUse
-uv run signal-light codex-hook PermissionRequest
-uv run signal-light codex-hook Stop
+$APP codex-hook UserPromptSubmit
+$APP codex-hook PreToolUse
+$APP codex-hook PermissionRequest
+$APP codex-hook Stop
 ```
 
 推荐映射：
@@ -92,9 +94,9 @@ uv run signal-light codex-hook Stop
 Claude Code 通过 stdin 传入 JSON hook 数据，不需要额外参数：
 
 ```bash
-echo '{"event":"PreToolUse","session_id":"demo"}' | uv run signal-light claude-code-hook
-echo '{"event":"PermissionRequest","session_id":"demo"}' | uv run signal-light claude-code-hook
-echo '{"event":"Notification","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"PreToolUse","session_id":"demo"}' | $APP claude-code-hook
+echo '{"event":"PermissionRequest","session_id":"demo"}' | $APP claude-code-hook
+echo '{"event":"Notification","session_id":"demo"}' | $APP claude-code-hook
 ```
 
 支持的 Claude Code 事件包括：

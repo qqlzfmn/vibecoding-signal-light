@@ -1,20 +1,6 @@
-# Python-generated files
-__pycache__/
-.pytest_cache/
-*.py[oc]
+# Build artifacts
 build/
 dist/
-wheels/
-*.egg-info
-.coverage
-coverage.xml
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual environments
-.venv
-venv/
 
 # Local machine files
 .DS_Store

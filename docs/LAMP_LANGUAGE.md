@@ -66,7 +66,10 @@ When a tracked session ends, the runtime briefly flashes green to make the compl
 ## Try It
 
 ```bash
-uv run signal-light status
+# CLI binary (inside the app bundle)
+APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
+
+$APP status
 ```
 
 ## Claude Code Hook Mapping
@@ -90,7 +93,7 @@ If `Stop` carries a `stop_reason` of `max_tokens` or `error`, the adapter uses `
 
 ## Claude Code settings.json Example
 
-Run `uv run signal-light install-hooks --agent claude-code` to install automatically, or add hooks manually to `~/.claude/settings.json`:
+Run `$APP install-hooks --agent claude-code` (or right-click the menu bar icon → "Install Hooks") to install automatically, or add hooks manually to `~/.claude/settings.json` (replace `<path-to>/SignalLightApp` with the actual binary path):
 
 ```json
 {
@@ -100,7 +103,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -112,7 +115,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -124,7 +127,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -136,7 +139,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -148,7 +151,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -160,7 +163,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 10
           }
         ],
@@ -172,7 +175,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -184,7 +187,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -196,7 +199,7 @@ Run `uv run signal-light install-hooks --agent claude-code` to install automatic
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light claude-code-hook",
+            "command": "<path-to>/SignalLightApp claude-code-hook",
             "timeout": 5
           }
         ],
@@ -211,7 +214,7 @@ Note: Claude Code passes the event as JSON on stdin, so the hook command does no
 
 ## Codex hooks.json Example
 
-Run `uv run signal-light install-hooks --agent codex` to install automatically, or add hooks manually to `~/.codex/hooks.json`:
+Run `$APP install-hooks --agent codex` to install automatically, or add hooks manually to `~/.codex/hooks.json` (replace `<path-to>/SignalLightApp` with the actual binary path):
 
 ```json
 {
@@ -221,7 +224,7 @@ Run `uv run signal-light install-hooks --agent codex` to install automatically, 
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light codex-hook UserPromptSubmit",
+            "command": "<path-to>/SignalLightApp codex-hook UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -232,7 +235,7 @@ Run `uv run signal-light install-hooks --agent codex` to install automatically, 
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light codex-hook PreToolUse",
+            "command": "<path-to>/SignalLightApp codex-hook PreToolUse",
             "timeout": 5
           }
         ]
@@ -243,7 +246,7 @@ Run `uv run signal-light install-hooks --agent codex` to install automatically, 
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light codex-hook PermissionRequest",
+            "command": "<path-to>/SignalLightApp codex-hook PermissionRequest",
             "timeout": 10
           }
         ]
@@ -254,7 +257,7 @@ Run `uv run signal-light install-hooks --agent codex` to install automatically, 
         "hooks": [
           {
             "type": "command",
-            "command": "uv run signal-light codex-hook Stop",
+            "command": "<path-to>/SignalLightApp codex-hook Stop",
             "timeout": 5
           }
         ]

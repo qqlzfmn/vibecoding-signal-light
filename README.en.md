@@ -46,7 +46,6 @@ The language is intentionally small and persistent. The current light should alw
 ## Quick Start
 
 ```bash
-uv sync                                          # Install Python dependencies
 cd SignalLightApp && ./build.sh && cd ..          # Build macOS menu bar app
 open SignalLightApp/.build/SignalLightApp.app     # Launch
 ```
@@ -58,22 +57,25 @@ The app lives in the menu bar. Right-click to show details or quit. It writes it
 The easiest way to install or repair local hooks is the built-in wizard:
 
 ```bash
-uv run signal-light install-hooks
-uv run signal-light install-hooks --all -y
-uv run signal-light install-hooks --agent codex --agent claude-code -y
+# CLI binary (inside the app bundle)
+APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
+
+$APP install-hooks                    # Interactive selection
+$APP install-hooks --all -y           # Install all agents
+$APP install-hooks --agent codex --agent claude-code -y
 ```
 
-The wizard detects supported local agents, validates the current hook files, creates timestamped backups, and installs only the Signal Light hook entries while keeping other hooks on the same events.
+Or right-click the menu bar icon → "Install Hooks" submenu to install per agent. The wizard detects supported local agents, validates the current hook files, creates timestamped backups, and installs only the Signal Light hook entries while keeping other hooks on the same events.
 
 ## Codex Integration
 
 Codex hooks are invoked with the event name:
 
 ```bash
-uv run signal-light codex-hook UserPromptSubmit
-uv run signal-light codex-hook PreToolUse
-uv run signal-light codex-hook PermissionRequest
-uv run signal-light codex-hook Stop
+$APP codex-hook UserPromptSubmit
+$APP codex-hook PreToolUse
+$APP codex-hook PermissionRequest
+$APP codex-hook Stop
 ```
 
 Recommended hook mapping:
@@ -95,9 +97,9 @@ See [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md) for a complete `~/.codex/hook
 Claude Code sends hook data as JSON on stdin, so no event argument is needed:
 
 ```bash
-echo '{"event":"PreToolUse","session_id":"demo"}' | uv run signal-light claude-code-hook
-echo '{"event":"PermissionRequest","session_id":"demo"}' | uv run signal-light claude-code-hook
-echo '{"event":"Notification","session_id":"demo"}' | uv run signal-light claude-code-hook
+echo '{"event":"PreToolUse","session_id":"demo"}' | $APP claude-code-hook
+echo '{"event":"PermissionRequest","session_id":"demo"}' | $APP claude-code-hook
+echo '{"event":"Notification","session_id":"demo"}' | $APP claude-code-hook
 ```
 
 Supported Claude Code events include:
