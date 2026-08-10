@@ -38,8 +38,26 @@ final class StatusBarController {
 
         menu.addItem(NSMenuItem.separator())
 
-        let installItem = NSMenuItem(title: "Install Hooks", action: #selector(installHooks), keyEquivalent: "")
-        installItem.target = self
+        // Install Hooks → per-agent submenu
+        let installMenu = NSMenu()
+        for agent in HookInstaller.Agent.allCases {
+            let item = NSMenuItem(
+                title: agent.displayName,
+                action: #selector(installHooksForAgent(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = agent.rawValue
+            item.state = HookInstaller.inspectAgent(agent).installed ? .on : .off
+            installMenu.addItem(item)
+        }
+        installMenu.addItem(NSMenuItem.separator())
+        let allItem = NSMenuItem(title: "Install All", action: #selector(installHooks), keyEquivalent: "")
+        allItem.target = self
+        installMenu.addItem(allItem)
+
+        let installItem = NSMenuItem(title: "Install Hooks", action: nil, keyEquivalent: "")
+        installItem.submenu = installMenu
         menu.addItem(installItem)
 
         menu.addItem(NSMenuItem.separator())
@@ -179,6 +197,19 @@ final class StatusBarController {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func installHooksForAgent(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let agent = HookInstaller.Agent(rawValue: raw) else { return }
+
+        let result = HookInstaller.installAgentAndReport(agent)
+        let alert = NSAlert()
+        alert.messageText = "\(agent.displayName) Hooks"
+        alert.informativeText = result.message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func installHooks() {

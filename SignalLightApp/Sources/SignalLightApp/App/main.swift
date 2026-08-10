@@ -89,6 +89,9 @@ func runInstallHooks(args: [String]) -> Int32 {
             if normalized == "claude" || normalized == "claudecode" {
                 return .claudeCode
             }
+            if normalized == "pi" || normalized == "picodingagent" {
+                return .pi
+            }
             return HookInstaller.Agent(rawValue: normalized)
         }
         if keys.isEmpty {
@@ -127,6 +130,7 @@ func runInstallHooks(args: [String]) -> Int32 {
                 let c = chunk.trimmingCharacters(in: .whitespaces)
                 if c.isEmpty { return nil }
                 if c == "claude" || c == "claudecode" { return .claudeCode }
+                if c == "pi" || c == "picodingagent" { return .pi }
                 if let intVal = Int(c), intVal >= 1, intVal <= agents.count {
                     return agents[intVal - 1]
                 }

@@ -41,6 +41,8 @@ swiftc \
 
 # Copy Info.plist
 cp "$RESOURCES_DIR/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+# Copy omp/pi hook template
+cp "$RESOURCES_DIR/omp-hook-template.ts" "$APP_BUNDLE/Contents/Resources/"
 
 echo "==> Built: $APP_BUNDLE"
 echo "==> Run:   open $APP_BUNDLE"

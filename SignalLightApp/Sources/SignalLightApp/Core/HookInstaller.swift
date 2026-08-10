@@ -50,11 +50,15 @@ enum HookInstaller {
     enum Agent: String, CaseIterable {
         case codex
         case claudeCode = "claude-code"
+        case omp
+        case pi = "pi-coding-agent"
 
         var displayName: String {
             switch self {
             case .codex: return "Codex"
             case .claudeCode: return "Claude Code"
+            case .omp: return "omp"
+            case .pi: return "pi-coding-agent"
             }
         }
 
@@ -65,6 +69,12 @@ enum HookInstaller {
                 return (home as NSString).appendingPathComponent(".codex/hooks.json")
             case .claudeCode:
                 return (home as NSString).appendingPathComponent(".claude/settings.json")
+            case .omp:
+                return (home as NSString)
+                    .appendingPathComponent(".omp/agent/extensions/observability-signal-light.ts")
+            case .pi:
+                return (home as NSString)
+                    .appendingPathComponent(".pi/agent/extensions/observability-signal-light.ts")
             }
         }
 
@@ -72,13 +82,14 @@ enum HookInstaller {
             switch self {
             case .codex: return codexEvents
             case .claudeCode: return claudeCodeEvents
+            case .omp, .pi: return [:]
             }
         }
 
         var passesEventArg: Bool {
             switch self {
             case .codex: return true
-            case .claudeCode: return false
+            case .claudeCode, .omp, .pi: return false
             }
         }
 
@@ -86,6 +97,7 @@ enum HookInstaller {
             switch self {
             case .codex: return false
             case .claudeCode: return true
+            case .omp, .pi: return false
             }
         }
 
@@ -100,6 +112,15 @@ enum HookInstaller {
             switch self {
             case .codex: return codexHookCommand()
             case .claudeCode: return claudeCodeHookCommand()
+            case .omp, .pi: return ""
+            }
+        }
+
+        /// omp/pi 是文件复制型 agent：把 TS hook 模板装进扩展目录，无 JSON 配置。
+        var isTemplateInstall: Bool {
+            switch self {
+            case .codex, .claudeCode: return false
+            case .omp, .pi: return true
             }
         }
     }
@@ -117,6 +138,21 @@ enum HookInstaller {
     // MARK: - Inspection
 
     static func inspectAgent(_ agent: Agent) -> AgentStatus {
+        if agent.isTemplateInstall {
+            let path = agent.configPath
+            let exists = FileManager.default.fileExists(atPath: path)
+            let matches = exists
+                && (try? String(contentsOfFile: path, encoding: .utf8)) == templateHookText
+            return AgentStatus(
+                agent: agent,
+                installed: matches,
+                configExists: exists,
+                validJson: true,
+                missingEvents: [],
+                brokenEvents: [],
+                message: !exists ? "missing" : (matches ? "installed" : "outdated")
+            )
+        }
         let configExists = FileManager.default.fileExists(atPath: agent.configPath)
 
         let (config, validJson) = loadJSONConfig(at: agent.configPath)
@@ -194,6 +230,10 @@ enum HookInstaller {
     // MARK: - Install
 
     static func installAgent(_ agent: Agent) throws {
+        if agent.isTemplateInstall {
+            try installTemplateHook(agent: agent)
+            return
+        }
         var (config, validJson) = loadJSONConfig(at: agent.configPath)
         if !validJson {
             config = [:]
@@ -266,6 +306,42 @@ enum HookInstaller {
         let stamp = formatter.string(from: Date())
         let backupPath = path + ".bak-signal-light-install-\(stamp)"
         try? FileManager.default.copyItem(atPath: path, toPath: backupPath)
+    }
+
+    // MARK: - Template install (omp / pi-coding-agent)
+
+    /// omp/pi 的 hook 是 TS 扩展模板（bundle 内 `omp-hook-template.ts`），
+    /// 安装 = 复制到 agent 的用户级扩展目录，内容一致时幂等跳过。
+    private static func installTemplateHook(agent: Agent) throws {
+        guard let templateURL = Bundle.main.url(
+            forResource: "omp-hook-template", withExtension: "ts"
+        ) else {
+            throw InstallError.templateMissing
+        }
+        let template = try String(contentsOf: templateURL, encoding: .utf8)
+        let target = agent.configPath
+
+        if let existing = try? String(contentsOfFile: target, encoding: .utf8),
+           existing == template {
+            return
+        }
+
+        if FileManager.default.fileExists(atPath: target) {
+            backupConfig(at: target)
+        }
+        let dir = (target as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try template.write(toFile: target, atomically: true, encoding: .utf8)
+    }
+
+    /// 模板文本（inspect 对比用）；bundle 读不到时为 nil。
+    private static var templateHookText: String? {
+        guard let url = Bundle.main.url(
+            forResource: "omp-hook-template", withExtension: "ts"
+        ) else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     private static func eventHasExpectedHook(entries: Any, agent: Agent, event: String) -> Bool {
@@ -406,5 +482,6 @@ enum HookInstaller {
 
     enum InstallError: Error {
         case encodingFailed
+        case templateMissing
     }
 }

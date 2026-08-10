@@ -36,6 +36,7 @@ AI 编程助手越来越能自己跑命令、改文件、开子任务，但它�
 - macOS 菜单栏应用，彩色图标 + 浮动详情面板。
 - 支持 Codex hook。
 - 支持 Claude Code hook。
+- 支持 omp / pi-coding-agent（安装 hook 扩展模板，自动联动状态灯）。
 - 支持多个 Agent 会话并发时的状态聚合。
 - 红灯/黄灯告警不会被另一个会话的工作态覆盖。
 - 支持通过 launchd 开机自启。
@@ -60,9 +61,12 @@ APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
 $APP install-hooks                    # 交互式选择
 $APP install-hooks --all -y           # 安装全部 Agent
 $APP install-hooks --agent codex --agent claude-code -y
+$APP install-hooks --agent omp --agent pi-coding-agent -y
 ```
 
-也可以右键菜单栏图标 → "Install Hooks" 子菜单，按 Agent 分别安装。向导会识别已支持的 Agent，检查当前 hook 文件，写入前创建带时间戳的备份，并且只安装 Signal Light 自己的 hook 条目，保留同一事件下已有的其它 hook。
+也可以右键菜单栏图标 → "Install Hooks" 子菜单，按 Agent 分别安装（Codex / Claude Code / omp / pi-coding-agent）。向导会识别已支持的 Agent，检查当前 hook 文件，写入前创建带时间戳的备份，并且只安装 Signal Light 自己的 hook 条目，保留同一事件下已有的其它 hook。
+
+omp 与 pi-coding-agent 的安装方式不同：它们没有 JSON 配置，安装会把内置的 hook 扩展模板（`omp-hook-template.ts`）复制到用户级扩展目录（`~/.omp/agent/extensions/` 与 `~/.pi/agent/extensions/`），之后启动 agent 即自动加载、零参数联动状态灯。
 
 ## Codex 集成
 

@@ -25,6 +25,7 @@
 - **D4 — GUI 二级菜单**："Install Hooks" 变为子菜单，每 agent 一项（点击只装该 agent）+ 分隔线 + "Install All"（保留现有全装 + launchd 提示）。菜单项带勾选标记（启动时快照，安装后重开菜单刷新——不做动态刷新，YAGNI）。
 - **D5 — 显示名与别名**：`displayName = "omp"`；CLI 别名接受 `omp`（rawValue）。Codex/Claude Code 的现有别名逻辑不动。
 - **D6 — 模板缺失时 fail-fast**：bundle 读不到模板 → install 抛错、alert/CLI 显示明确错误（不静默）。
+- **D7 — pi-coding-agent 与 omp 并行支持**：两者是同一扩展 API 的同源实现（orca 扩展注释已印证），hook 模板完全相同，仅安装路径不同——`~/.omp/agent/extensions/` 与 `~/.pi/agent/extensions/`（本机已确认后者存在且与前者结构一致）。`Agent` 新增 `case omp` 与 `case pi`（displayName/rawValue `pi-coding-agent`，CLI 别名 `pi`），模板复制逻辑参数化为按 agent 取目标路径。
 
 ## 2. 交付物
 

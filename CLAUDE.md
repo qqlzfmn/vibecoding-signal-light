@@ -47,7 +47,7 @@ There is no linter or formatter configured. No CI pipeline.
   - `SessionStore.swift` — Reads/writes `sessions.json` with `fcntl.flock` locking, TTL pruning, and priority-based aggregation.
   - `CodexHookAdapter.swift` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection (error status, exit_status, tool_error).
   - `ClaudeCodeHookAdapter.swift` — Maps Claude Code hook events to signal names. Supports `stop_reason` handling and `SubagentStart`/`SubagentStop`/`Notification`.
-  - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Handles merge with existing hooks and creates backups.
+  - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Installs the bundled omp/pi-coding-agent hook template into `~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`. Handles merge with existing hooks and creates backups.
 
 - **`Models/`**
   - `SessionState.swift` — Codable JSON model matching the `sessions.json` format.

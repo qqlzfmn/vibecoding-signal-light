@@ -39,6 +39,7 @@ The language is intentionally small and persistent. The current light should alw
 - macOS menu bar app with coloured icon and floating detail panel.
 - Codex hook adapter.
 - Claude Code hook adapter.
+- omp / pi-coding-agent support (installs the hook extension template for zero-config status linking).
 - Session-aware aggregation for multiple concurrent agent sessions.
 - Red and yellow alerts are never hidden by another session starting work.
 - Auto-start on login via launchd.
@@ -63,9 +64,12 @@ APP=SignalLightApp/.build/SignalLightApp.app/Contents/MacOS/SignalLightApp
 $APP install-hooks                    # Interactive selection
 $APP install-hooks --all -y           # Install all agents
 $APP install-hooks --agent codex --agent claude-code -y
+$APP install-hooks --agent omp --agent pi-coding-agent -y
 ```
 
-Or right-click the menu bar icon → "Install Hooks" submenu to install per agent. The wizard detects supported local agents, validates the current hook files, creates timestamped backups, and installs only the Signal Light hook entries while keeping other hooks on the same events.
+Or right-click the menu bar icon → "Install Hooks" submenu to install per agent (Codex / Claude Code / omp / pi-coding-agent). The wizard detects supported local agents, validates the current hook files, creates timestamped backups, and installs only the Signal Light hook entries while keeping other hooks on the same events.
+
+omp and pi-coding-agent install differently: instead of a JSON config, the wizard copies the bundled hook extension template (`omp-hook-template.ts`) into the agent's user-level extensions directory (`~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`). The agent loads it automatically on next start — no flags or environment variables needed.
 
 ## Codex Integration
 
