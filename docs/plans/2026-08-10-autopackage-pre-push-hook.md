@@ -191,3 +191,10 @@ en 对应翻译。
 2. docs-only push 跳过打包（日志确认，exit 0）。
 3. 代码 push 触发完整链路：package.sh 成功 → nightly release 存在 → 资产为最新 pkg。
 4. 打包失败场景阻断 push（手动制造：临时破坏 package.sh 或用 `gh` 无权限环境模拟——验证失败输出非 0，不真推）。
+
+---
+
+## 实现偏差记录（2026-08-10 执行期）
+
+1. **`gh release create --target` 的 422 陷阱**：pre-push 时正在推送的 commit 尚不存在于远端，`--target <local_sha>` 报 `Release.target_commitish is invalid`。修复：首次创建 nightly 时 `--target` 取 `origin/main`（远端已存在）；nightly 已存在后走 `upload --clobber` + `edit` 分支，不再涉及 target。已用真 push 验证两条分支（首次创建 ✓、覆盖更新 ✓）。
+2. 验证覆盖了两条分支 + 失败阻断（受限 PATH 使 `gh` 不可见 → hook 非 0 退出 → push 被拒，分支保留）。测试分支 `test-hook-code` 已删除，main 不受测试 commit 影响。

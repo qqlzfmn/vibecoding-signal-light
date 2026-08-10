@@ -12,7 +12,9 @@ PKG="$BUILD_DIR/SignalLightApp.pkg"
 # stdin: <local ref> <local sha> <remote ref> <remote sha> per pushed ref
 refs=()
 while read -r local_ref local_sha remote_ref remote_sha; do
+    # 删除型推送（local sha 全 0）与空行直接跳过
     [ -z "$local_sha" ] && continue
+    [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
     refs+=("$local_ref" "$local_sha" "$remote_ref" "$remote_sha")
 done
 
