@@ -119,6 +119,18 @@ echo '{"event":"Notification","session_id":"demo"}' | $APP claude-code-hook
 
 完整 `~/.claude/settings.json` 示例见 [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md)。
 
+## Nightly 构建
+
+推送 `SignalLightApp/` 下的代码变更时，`.githooks/pre-push` 会自动重新打包并上传到 GitHub 的 `nightly` release（固定名称，资产 `SignalLightApp.pkg` + `sha256` 覆盖更新；仅文档变更的推送会跳过）。
+
+启用（一次性）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+手动打包：`bash SignalLightApp/package.sh`
+
 ## 多会话行为
 
 运行时会记录每个 Agent 会话的最新状态，并把最高优先级状态显示到菜单栏：

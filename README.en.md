@@ -122,6 +122,18 @@ Supported Claude Code events include:
 
 See [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md) for a complete `~/.claude/settings.json` example.
 
+## Nightly Builds
+
+When code under `SignalLightApp/` is pushed, the `.githooks/pre-push` hook automatically rebuilds the package and uploads it to the fixed `nightly` GitHub release (assets `SignalLightApp.pkg` + sha256 overwrite in place; docs-only pushes are skipped).
+
+Enable once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Manual build: `bash SignalLightApp/package.sh`
+
 ## Multi-Session Behavior
 
 The runtime stores the latest state for each agent session and shows the highest-priority aggregate on the menu bar:
