@@ -1,7 +1,6 @@
 import Foundation
 
 /// Session state management — read/write/aggregate sessions.json with flock-based locking.
-/// Port of `signal_light/session.py`.
 enum SessionStore {
 
     // MARK: - Paths
@@ -98,7 +97,7 @@ enum SessionStore {
         }
     }
 
-    // MARK: - File locking (fcntl flock, mirroring Python's fcntl.LOCK_EX)
+    // MARK: - File locking (fcntl flock, LOCK_EX)
 
     private static func withLock<T>(_ body: () -> T) -> T {
         try? FileManager.default.createDirectory(

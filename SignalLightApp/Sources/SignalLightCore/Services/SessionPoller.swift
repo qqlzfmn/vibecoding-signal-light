@@ -59,7 +59,7 @@ final class SessionPoller {
             let now = Date().timeIntervalSince1970
             let ttl = 86400.0
 
-            // Prune expired sessions (defensive — Python side also prunes).
+            // Prune expired sessions.
             var sessions = file.sessions
             sessions = sessions.filter { _, entry in
                 now - entry.updatedAt <= ttl

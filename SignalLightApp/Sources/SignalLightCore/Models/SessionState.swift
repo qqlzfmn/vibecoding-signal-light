@@ -1,6 +1,6 @@
 import Foundation
 
-/// Matches the JSON format written by the Python hook scripts.
+/// Root JSON document of the sessions state file, written by the hook CLI.
 struct SessionFile: Codable {
     var sessions: [String: SessionEntry]
 }

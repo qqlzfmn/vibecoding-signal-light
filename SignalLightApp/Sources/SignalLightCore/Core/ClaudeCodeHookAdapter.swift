@@ -1,7 +1,6 @@
 import Foundation
 
 /// Claude Code hook adapter — maps Claude Code lifecycle events to signal names.
-/// Port of `signal_light/hooks/claude_code.py`.
 enum ClaudeCodeHookAdapter {
 
     // MARK: - Event → Signal mapping

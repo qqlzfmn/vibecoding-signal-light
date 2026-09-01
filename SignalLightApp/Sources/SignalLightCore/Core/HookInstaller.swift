@@ -1,7 +1,6 @@
 import Foundation
 
 /// Install and repair local agent hook configuration.
-/// Port of `signal_light/hooks/installer.py`.
 enum HookInstaller {
 
     // MARK: - Constants
@@ -20,132 +19,18 @@ enum HookInstaller {
         return "\(executablePath) claude-code-hook"
     }
 
-    static let codexEvents: [String: Int] = [
-        "SessionStart": 5,
-        "UserPromptSubmit": 5,
-        "PreToolUse": 5,
-        "PostToolUse": 5,
-        "PermissionRequest": 10,
-        "Stop": 5,
-        "SessionEnd": 5,
-    ]
-
-    static let claudeCodeEvents: [String: Int] = [
-        "SessionStart": 5,
-        "UserPromptSubmit": 5,
-        "PreToolUse": 5,
-        "PostToolUse": 5,
-        "PostToolUseFailure": 5,
-        "PreCompact": 5,
-        "SubagentStart": 5,
-        "SubagentStop": 5,
-        "PermissionRequest": 10,
-        "Notification": 5,
-        "Stop": 5,
-        "SessionEnd": 5,
-    ]
-
-    // MARK: - Types
-
-    enum Agent: String, CaseIterable {
-        case codex
-        case claudeCode = "claude-code"
-        case omp
-        case pi = "pi-coding-agent"
-
-        var displayName: String {
-            switch self {
-            case .codex: return "Codex"
-            case .claudeCode: return "Claude Code"
-            case .omp: return "omp"
-            case .pi: return "pi-coding-agent"
-            }
-        }
-
-        func configPath(inHome home: String) -> String {
-            switch self {
-            case .codex:
-                return (home as NSString).appendingPathComponent(".codex/hooks.json")
-            case .claudeCode:
-                return (home as NSString).appendingPathComponent(".claude/settings.json")
-            case .omp:
-                return (home as NSString)
-                    .appendingPathComponent(".omp/agent/extensions/observability-signal-light.ts")
-            case .pi:
-                return (home as NSString)
-                    .appendingPathComponent(".pi/agent/extensions/observability-signal-light.ts")
-            }
-        }
-
-        var configPath: String {
-            configPath(inHome: NSHomeDirectory())
-        }
-
-        var events: [String: Int] {
-            switch self {
-            case .codex: return codexEvents
-            case .claudeCode: return claudeCodeEvents
-            case .omp, .pi: return [:]
-            }
-        }
-
-        var passesEventArg: Bool {
-            switch self {
-            case .codex: return true
-            case .claudeCode, .omp, .pi: return false
-            }
-        }
-
-        var usesMatcher: Bool {
-            switch self {
-            case .codex: return false
-            case .claudeCode: return true
-            case .omp, .pi: return false
-            }
-        }
-
-        func hookCommand(for event: String) -> String {
-            if passesEventArg {
-                return "\(hookScript) \(event)"
-            }
-            return hookScript
-        }
-
-        var hookScript: String {
-            switch self {
-            case .codex: return codexHookCommand()
-            case .claudeCode: return claudeCodeHookCommand()
-            case .omp, .pi: return ""
-            }
-        }
-
-        /// omp/pi 是文件复制型 agent：把 TS hook 模板装进扩展目录，无 JSON 配置。
-        var isTemplateInstall: Bool {
-            switch self {
-            case .codex, .claudeCode: return false
-            case .omp, .pi: return true
-            }
-        }
-    }
-
-    struct AgentStatus {
-        let agent: Agent
-        let installed: Bool
-        let configExists: Bool
-        let validJson: Bool
-        let missingEvents: [String]
-        let brokenEvents: [String]
-        let message: String
-    }
-
     // MARK: - Inspection
 
-    static func inspectAgent(_ agent: Agent, home: String = NSHomeDirectory()) -> AgentStatus {
+    /// `templateText` 为注入值（测试用）；默认 nil 时从 bundle 读取模板文本。
+    static func inspectAgent(
+        _ agent: Agent, home: String = NSHomeDirectory(), templateText: String? = nil
+    ) -> AgentStatus {
         if agent.isTemplateInstall {
             let path = agent.configPath(inHome: home)
             let exists = FileManager.default.fileExists(atPath: path)
+            let expected = templateText ?? loadTemplateText()
             let matches = exists
-                && (try? String(contentsOfFile: path, encoding: .utf8)) == templateHookText
+                && (try? String(contentsOfFile: path, encoding: .utf8)) == expected
             return AgentStatus(
                 agent: agent,
                 installed: matches,
@@ -232,9 +117,12 @@ enum HookInstaller {
 
     // MARK: - Install
 
-    static func installAgent(_ agent: Agent, home: String = NSHomeDirectory()) throws {
+    /// `templateText` 为注入值（测试用）；默认 nil 时从 bundle 读取模板文本。
+    static func installAgent(
+        _ agent: Agent, home: String = NSHomeDirectory(), templateText: String? = nil
+    ) throws {
         if agent.isTemplateInstall {
-            try installTemplateHook(agent: agent, home: home)
+            try installTemplateHook(agent: agent, home: home, templateText: templateText)
             return
         }
         var (config, validJson) = loadJSONConfig(at: agent.configPath(inHome: home))
@@ -281,9 +169,11 @@ enum HookInstaller {
 
     /// Install hooks for the given agent. Returns the status after install.
     @discardableResult
-    static func installAgentAndReport(_ agent: Agent, home: String = NSHomeDirectory()) -> AgentStatus {
-        try? installAgent(agent, home: home)
-        return inspectAgent(agent, home: home)
+    static func installAgentAndReport(
+        _ agent: Agent, home: String = NSHomeDirectory(), templateText: String? = nil
+    ) -> AgentStatus {
+        try? installAgent(agent, home: home, templateText: templateText)
+        return inspectAgent(agent, home: home, templateText: templateText)
     }
 
     // MARK: - Internal helpers
@@ -313,15 +203,24 @@ enum HookInstaller {
 
     // MARK: - Template install (omp / pi-coding-agent)
 
-    /// omp/pi 的 hook 是 TS 扩展模板（bundle 内 `omp-hook-template.ts`），
-    /// 安装 = 复制到 agent 的用户级扩展目录，内容一致时幂等跳过。
-    private static func installTemplateHook(agent: Agent, home: String) throws {
-        guard let templateURL = Bundle.main.url(
+    /// 模板文本（安装与 inspect 对比用）；bundle 读不到时为 nil。
+    static func loadTemplateText() -> String? {
+        guard let url = Bundle.main.url(
             forResource: "omp-hook-template", withExtension: "ts"
         ) else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// omp/pi 的 hook 是 TS 扩展模板（bundle 内 `omp-hook-template.ts`），
+    /// 安装 = 复制到 agent 的用户级扩展目录，内容一致时幂等跳过。
+    private static func installTemplateHook(
+        agent: Agent, home: String, templateText: String? = nil
+    ) throws {
+        guard let template = templateText ?? loadTemplateText() else {
             throw InstallError.templateMissing
         }
-        let template = try String(contentsOf: templateURL, encoding: .utf8)
         let target = agent.configPath(inHome: home)
 
         if let existing = try? String(contentsOfFile: target, encoding: .utf8),
@@ -335,152 +234,6 @@ enum HookInstaller {
         let dir = (target as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try template.write(toFile: target, atomically: true, encoding: .utf8)
-    }
-
-    /// 模板文本（inspect 对比用）；bundle 读不到时为 nil。
-    private static var templateHookText: String? {
-        guard let url = Bundle.main.url(
-            forResource: "omp-hook-template", withExtension: "ts"
-        ) else {
-            return nil
-        }
-        return try? String(contentsOf: url, encoding: .utf8)
-    }
-
-    private static func eventHasExpectedHook(entries: Any, agent: Agent, event: String) -> Bool {
-        guard let groups = entries as? [Any] else { return false }
-        let expected = agent.hookCommand(for: event)
-        let timeout = agent.events[event] ?? 5
-
-        for group in groups {
-            guard let groupDict = group as? [String: Any] else { continue }
-            // For Claude Code, skip groups with non-empty matcher.
-            if agent.usesMatcher,
-               let matcher = groupDict["matcher"] as? String,
-               !matcher.isEmpty {
-                continue
-            }
-            guard let hooks = groupDict["hooks"] as? [[String: Any]] else { continue }
-            for hook in hooks {
-                if hook["type"] as? String == "command",
-                   hook["command"] as? String == expected,
-                   hook["timeout"] as? Int == timeout {
-                    return true
-                }
-            }
-        }
-        return false
-    }
-
-    private static func mergeEventGroups(
-        existingEntries: Any?, agent: Agent, event: String, timeout: Int
-    ) -> [Any] {
-        let replacement = hookGroup(agent: agent, event: event, timeout: timeout)
-        guard let groups = existingEntries as? [Any] else {
-            return [replacement]
-        }
-
-        var merged: [Any] = []
-        var replaced = false
-
-        for group in groups {
-            guard let groupDict = group as? [String: Any] else {
-                merged.append(group)
-                continue
-            }
-            let (replacementGroup, cleanedGroup, hadSignalLight) = replaceSignalLightHooks(
-                group: groupDict, agent: agent, replacement: replacement
-            )
-            if hadSignalLight {
-                if let rg = replacementGroup { merged.append(rg); replaced = true }
-                if let cg = cleanedGroup { merged.append(cg) }
-            } else {
-                merged.append(group)
-            }
-        }
-
-        if !replaced {
-            merged.append(replacement)
-        }
-
-        return merged
-    }
-
-    private static func replaceSignalLightHooks(
-        group: [String: Any], agent: Agent, replacement: [String: Any]
-    ) -> (replacementGroup: [String: Any]?, cleanedGroup: [String: Any]?, hadSignalLight: Bool) {
-        guard let hooks = group["hooks"] as? [[String: Any]] else {
-            return (nil, group, false)
-        }
-
-        let replacementHooks = replacement["hooks"] as? [[String: Any]] ?? []
-        var updatedHooks: [[String: Any]] = []
-        var keptHooks: [[String: Any]] = []
-        var replaced = false
-
-        for hook in hooks {
-            if hook["type"] as? String == "command",
-               isSignalLightCommand(hook["command"] as? String, agent: agent) {
-                if !replaced {
-                    updatedHooks.append(contentsOf: replacementHooks)
-                    replaced = true
-                }
-                // Skip old signal light hook.
-            } else {
-                keptHooks.append(hook)
-                updatedHooks.append(hook)
-            }
-        }
-
-        guard replaced else { return (nil, group, false) }
-
-        var replacementGroup = group
-        replacementGroup["hooks"] = updatedHooks
-        if let matcher = replacement["matcher"] {
-            replacementGroup["matcher"] = matcher
-        }
-
-        if keptHooks.isEmpty {
-            // All hooks replaced — just one group.
-            var pureReplacement = group
-            pureReplacement["hooks"] = replacementHooks
-            if let matcher = replacement["matcher"] {
-                pureReplacement["matcher"] = matcher
-            }
-            return (pureReplacement, nil, true)
-        }
-
-        var cleanedGroup = group
-        cleanedGroup["hooks"] = keptHooks
-        return (replacementGroup, cleanedGroup, true)
-    }
-
-    private static func isSignalLightCommand(_ command: String?, agent: Agent) -> Bool {
-        guard let command = command, !command.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return false
-        }
-        let parts = command.components(separatedBy: .whitespaces)
-        let joined = parts.filter { !$0.isEmpty }.joined(separator: " ")
-        return joined.contains("signal-light codex-hook")
-            || joined.contains("signal-light claude-code-hook")
-            || joined.contains("SignalLightApp codex-hook")
-            || joined.contains("SignalLightApp claude-code-hook")
-    }
-
-    private static func hookGroup(agent: Agent, event: String, timeout: Int) -> [String: Any] {
-        var group: [String: Any] = [
-            "hooks": [
-                [
-                    "type": "command",
-                    "command": agent.hookCommand(for: event),
-                    "timeout": timeout,
-                ] as [String: Any]
-            ]
-        ]
-        if agent.usesMatcher {
-            group["matcher"] = ""
-        }
-        return group
     }
 
     enum InstallError: Error {

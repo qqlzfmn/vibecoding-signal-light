@@ -1,7 +1,6 @@
 import Foundation
 
 /// Codex hook adapter — maps Codex lifecycle events to signal names.
-/// Port of `signal_light/hooks/codex.py`.
 enum CodexHookAdapter {
 
     // MARK: - Event → Signal mapping

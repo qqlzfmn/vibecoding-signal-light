@@ -16,10 +16,6 @@ enum StatePaths {
         (stateDir as NSString).appendingPathComponent("state.lock")
     }
 
-    static var pidFile: String {
-        (stateDir as NSString).appendingPathComponent("gui-daemon.pid")
-    }
-
     static var logFile: String {
         (stateDir as NSString).appendingPathComponent("app.log")
     }

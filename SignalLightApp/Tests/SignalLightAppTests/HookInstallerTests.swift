@@ -198,4 +198,73 @@ import Foundation
             )
         }
     }
+
+    // MARK: - Template install (omp / pi)
+
+    private static let templateText =
+        "// signal-light omp hook template\nexport const signalLight = true\n"
+
+    @Test func ompTemplateInstallWritesFileAndReportsInstalled() throws {
+        let template = Self.templateText
+        let status = HookInstaller.installAgentAndReport(.omp, home: home, templateText: template)
+
+        let path = HookInstaller.Agent.omp.configPath(inHome: home)
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == template)
+        #expect(status.installed, "status: \(status.message)")
+        #expect(status.message == "installed")
+        #expect(status.configExists)
+    }
+
+    @Test func ompTemplateInstallIsIdempotent() throws {
+        let template = Self.templateText
+        _ = HookInstaller.installAgentAndReport(.omp, home: home, templateText: template)
+
+        let path = HookInstaller.Agent.omp.configPath(inHome: home)
+        let before = try String(contentsOfFile: path, encoding: .utf8)
+        try HookInstaller.installAgent(.omp, home: home, templateText: template)
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == before)
+
+        // Idempotent reinstall must not create a backup.
+        let dir = (path as NSString).deletingLastPathComponent
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir)
+            .filter { $0.contains(".bak-signal-light-install-") }
+        #expect(backups.isEmpty)
+    }
+
+    @Test func piTemplateInstallReplacesDifferentContentWithBackup() throws {
+        let template = Self.templateText
+        let path = HookInstaller.Agent.pi.configPath(inHome: home)
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true
+        )
+        try "old content".write(toFile: path, atomically: true, encoding: .utf8)
+
+        let status = HookInstaller.installAgentAndReport(.pi, home: home, templateText: template)
+
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == template)
+        #expect(status.installed, "status: \(status.message)")
+
+        let dir = (path as NSString).deletingLastPathComponent
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir)
+            .filter { $0.hasPrefix("observability-signal-light.ts.bak-signal-light-install-") }
+        #expect(backups.count == 1)
+        guard let backupName = backups.first else { return }
+        let backupText = try String(
+            contentsOfFile: (dir as NSString).appendingPathComponent(backupName), encoding: .utf8
+        )
+        #expect(backupText == "old content")
+    }
+
+    @Test func inspectReportsOutdatedForDifferentTemplateContent() throws {
+        let template = Self.templateText
+        let path = HookInstaller.Agent.omp.configPath(inHome: home)
+        try FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true
+        )
+        try "stale".write(toFile: path, atomically: true, encoding: .utf8)
+
+        let status = HookInstaller.inspectAgent(.omp, home: home, templateText: template)
+        #expect(!status.installed)
+        #expect(status.message == "outdated")
+    }
 }
