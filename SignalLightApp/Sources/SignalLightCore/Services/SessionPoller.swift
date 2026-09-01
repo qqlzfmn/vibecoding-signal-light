@@ -73,7 +73,9 @@ final class SessionPoller {
             )
             subject.send(state)
         } catch {
-            // JSON parse failure — treat as empty.
+            // JSON parse failure — treat as empty, but trace it so silent data
+            // loss is visible in logs.
+            fputs("signal-light: corrupt sessions.json ignored (\(error.localizedDescription))\n", stderr)
             let empty = State(aggregateSignal: "idle", sessionCount: 0, sessions: [:])
             subject.send(empty)
         }

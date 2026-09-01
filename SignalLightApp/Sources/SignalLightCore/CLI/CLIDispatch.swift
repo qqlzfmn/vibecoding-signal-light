@@ -30,7 +30,13 @@ public enum CLIDispatch {
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-            let data = try! encoder.encode(output)
+            let data: Data
+            do {
+                data = try encoder.encode(output)
+            } catch {
+                fputs("signal-light: cannot encode status output: \(error)\n", stderr)
+                return 1
+            }
             if let json = String(data: data, encoding: .utf8) {
                 print(json)
             }
@@ -40,7 +46,12 @@ public enum CLIDispatch {
             return InstallHooksCLI.run(args)
 
         case "clear-state":
-            SessionStore.clearSessionState()
+            do {
+                try SessionStore.clearSessionState()
+            } catch {
+                fputs("signal-light: \(error)\n", stderr)
+                return 1
+            }
             print("Session state cleared.")
             return 0
 

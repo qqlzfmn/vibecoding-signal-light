@@ -8,9 +8,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure state directory exists.
-        try? FileManager.default.createDirectory(
-            atPath: StatePaths.stateDir, withIntermediateDirectories: true
-        )
+        do {
+            try FileManager.default.createDirectory(
+                atPath: StatePaths.stateDir, withIntermediateDirectories: true
+            )
+        } catch {
+            fputs("signal-light: cannot create state dir \(StatePaths.stateDir): \(error)\n", stderr)
+        }
 
         // Start polling.
         let poller = SessionPoller()

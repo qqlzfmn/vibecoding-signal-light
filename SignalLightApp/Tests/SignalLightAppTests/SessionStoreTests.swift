@@ -84,50 +84,50 @@ final class SessionStoreTests {
 
     // MARK: - applySessionSignal
 
-    @Test func applyWorkingSignalPersistsAndAggregates() {
-        let aggregate = SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
+    @Test func applyWorkingSignalPersistsAndAggregates() throws {
+        let aggregate = try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
         #expect(aggregate == "working")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"]?.signal == "working")
     }
 
-    @Test func applySessionEndRemovesSession() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "session_end")
+    @Test func applySessionEndRemovesSession() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "session_end")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"] == nil)
         #expect(SessionStore.readSessionSnapshot()["aggregate"] as? String == "idle")
     }
 
-    @Test func applyOffRemovesSession() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "off")
+    @Test func applyOffRemovesSession() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "off")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"] == nil)
     }
 
-    @Test func turnEndRemovesNonProtectedSession() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
+    @Test func turnEndRemovesNonProtectedSession() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"] == nil)
     }
 
-    @Test func turnEndKeepsPermissionSession() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "permission")
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
+    @Test func turnEndKeepsPermissionSession() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "permission")
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"]?.signal == "permission")
     }
 
-    @Test func turnEndKeepsBlockedSession() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "blocked")
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
+    @Test func turnEndKeepsBlockedSession() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "blocked")
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
 
         let sessions = readSessionsFile()
         #expect(sessions["s1"]?.signal == "blocked")
@@ -151,11 +151,11 @@ final class SessionStoreTests {
 
     // MARK: - clearSessionState
 
-    @Test func clearSessionStateEmptiesStore() {
-        SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
-        SessionStore.applySessionSignal(sessionKey: "s2", signalName: "blocked")
+    @Test func clearSessionStateEmptiesStore() throws {
+        try SessionStore.applySessionSignal(sessionKey: "s1", signalName: "working")
+        try SessionStore.applySessionSignal(sessionKey: "s2", signalName: "blocked")
 
-        SessionStore.clearSessionState()
+        try SessionStore.clearSessionState()
 
         #expect(readSessionsFile().isEmpty)
         #expect(SessionStore.readSessionSnapshot()["aggregate"] as? String == "idle")

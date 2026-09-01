@@ -39,10 +39,16 @@ enum HookSupport {
     }
 
     /// Shared tail of every hook adapter: persist the signal and print the result.
+    /// Persist errors are reported on stderr and yield exit code 1 — never silent.
     @discardableResult
     static func applyAndReport(sessionKey: String, signal: String) -> Int32 {
-        let aggregate = SessionStore.applySessionSignal(sessionKey: sessionKey, signalName: signal)
-        print("Session \(sessionKey): \(signal); aggregate=\(aggregate)")
-        return 0
+        do {
+            let aggregate = try SessionStore.applySessionSignal(sessionKey: sessionKey, signalName: signal)
+            print("Session \(sessionKey): \(signal); aggregate=\(aggregate)")
+            return 0
+        } catch {
+            fputs("signal-light: \(error)\n", stderr)
+            return 1
+        }
     }
 }

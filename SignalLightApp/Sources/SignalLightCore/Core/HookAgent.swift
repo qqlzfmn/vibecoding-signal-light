@@ -119,6 +119,6 @@ extension HookInstaller {
         let validJson: Bool
         let missingEvents: [String]
         let brokenEvents: [String]
-        let message: String
+        var message: String
     }
 }

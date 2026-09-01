@@ -1,8 +1,14 @@
 import Foundation
 
+/// Errors thrown when session state cannot be persisted or the file lock
+/// cannot be acquired. Replaces the previous silent `try?` failures.
+enum SessionStoreError: Error {
+    case lockUnavailable(String)
+    case writeFailed(String)
+}
+
 /// Session state management — read/write/aggregate sessions.json with flock-based locking.
 enum SessionStore {
-
     // MARK: - Paths
 
     static var stateDir: String { StatePaths.stateDir }
@@ -22,9 +28,10 @@ enum SessionStore {
     // MARK: - Public API
 
     /// Update one session's signal. Returns the new aggregate signal name.
+    /// Throws `SessionStoreError` when the state file cannot be written.
     @discardableResult
-    static func applySessionSignal(sessionKey: String, signalName: String) -> String {
-        return withLock {
+    static func applySessionSignal(sessionKey: String, signalName: String) throws -> String {
+        return try withLock {
             var state = readSessionFile()
             let now = Date().timeIntervalSince1970
             pruneSessions(&state.sessions, now: now)
@@ -44,51 +51,71 @@ enum SessionStore {
             }
 
             let aggregate = aggregateSignal(from: state.sessions)
-            writeSessionFile(state)
+            try writeSessionFile(state)
             return aggregate
         }
     }
 
     /// Clear all tracked session states.
-    static func clearSessionState() {
-        withLock {
-            writeSessionFile(SessionFile(sessions: [:]))
+    /// Throws `SessionStoreError` when the state file cannot be written.
+    static func clearSessionState() throws {
+        try withLock {
+            try writeSessionFile(SessionFile(sessions: [:]))
         }
     }
 
     /// Read the current snapshot (aggregate + sessions) without modifying.
-    /// `sessions` holds typed `SessionEntry` values.
+    /// `sessions` holds typed `SessionEntry` values. Read failures are tolerated
+    /// and yield an idle/empty snapshot.
     static func readSessionSnapshot() -> [String: Any] {
-        return withLock {
-            var state = readSessionFile()
-            pruneSessions(&state.sessions, now: Date().timeIntervalSince1970)
-            return [
-                "aggregate": aggregateSignal(from: state.sessions),
-                "sessions": state.sessions,
-            ]
+        do {
+            return try withLock {
+                var state = readSessionFile()
+                pruneSessions(&state.sessions, now: Date().timeIntervalSince1970)
+                return [
+                    "aggregate": aggregateSignal(from: state.sessions),
+                    "sessions": state.sessions,
+                ]
+            }
+        } catch {
+            return ["aggregate": "idle", "sessions": [String: SessionEntry]()]
         }
     }
 
-    // MARK: - File I/O (typed JSON, see Models/SessionState.swift)
-
-    /// Decode failure (missing/corrupt file or malformed JSON) yields an empty
-    /// state — same silent tolerance as before.
+    /// Missing file and malformed JSON yield an empty state, but a malformed
+    /// (non-empty) file is traced to stderr — silent data loss hides bugs.
     private static func readSessionFile() -> SessionFile {
-        guard let data = FileManager.default.contents(atPath: sessionFile),
-              let state = try? JSONDecoder().decode(SessionFile.self, from: data) else {
+        guard let data = FileManager.default.contents(atPath: sessionFile) else {
             return SessionFile(sessions: [:])
         }
-        return state
+        do {
+            return try JSONDecoder().decode(SessionFile.self, from: data)
+        } catch {
+            fputs("signal-light: corrupt sessions.json ignored (\(error.localizedDescription))\n", stderr)
+            return SessionFile(sessions: [:])
+        }
     }
-
-    private static func writeSessionFile(_ state: SessionFile) {
-        try? FileManager.default.createDirectory(
-            atPath: stateDir, withIntermediateDirectories: true
-        )
+    private static func writeSessionFile(_ state: SessionFile) throws {
+        do {
+            try FileManager.default.createDirectory(
+                atPath: stateDir, withIntermediateDirectories: true
+            )
+        } catch {
+            throw SessionStoreError.writeFailed("cannot create state dir \(stateDir): \(error)")
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
-        guard let data = try? encoder.encode(state) else { return }
-        try? data.write(to: URL(fileURLWithPath: sessionFile), options: .atomic)
+        let data: Data
+        do {
+            data = try encoder.encode(state)
+        } catch {
+            throw SessionStoreError.writeFailed("cannot encode session state: \(error)")
+        }
+        do {
+            try data.write(to: URL(fileURLWithPath: sessionFile), options: .atomic)
+        } catch {
+            throw SessionStoreError.writeFailed("cannot write \(sessionFile): \(error)")
+        }
     }
 
     private static func pruneSessions(_ sessions: inout [String: SessionEntry], now: TimeInterval) {
@@ -97,12 +124,14 @@ enum SessionStore {
         }
     }
 
-    // MARK: - File locking (fcntl flock, LOCK_EX)
-
-    private static func withLock<T>(_ body: () -> T) -> T {
-        try? FileManager.default.createDirectory(
-            atPath: stateDir, withIntermediateDirectories: true
-        )
+    private static func withLock<T>(_ body: () throws -> T) throws -> T {
+        do {
+            try FileManager.default.createDirectory(
+                atPath: stateDir, withIntermediateDirectories: true
+            )
+        } catch {
+            throw SessionStoreError.writeFailed("cannot create state dir \(stateDir): \(error)")
+        }
 
         // Open or create the lock file.
         if !FileManager.default.fileExists(atPath: lockFile) {
@@ -110,15 +139,16 @@ enum SessionStore {
         }
 
         guard let fd = fopen(lockFile, "a+") else {
-            // Can't open lock file — proceed without locking (best effort).
-            return body()
+            throw SessionStoreError.lockUnavailable(
+                "cannot open lock file \(lockFile): \(String(cString: strerror(errno)))"
+            )
         }
         defer { fclose(fd) }
 
         flock(fileno(fd), LOCK_EX)
         defer { flock(fileno(fd), LOCK_UN) }
 
-        return body()
+        return try body()
     }
 }
 

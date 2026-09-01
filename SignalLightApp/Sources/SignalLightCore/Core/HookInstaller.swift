@@ -168,11 +168,19 @@ enum HookInstaller {
     }
 
     /// Install hooks for the given agent. Returns the status after install.
+    /// A failed install is reported via `message` ("install failed: …") instead
+    /// of being silently swallowed.
     @discardableResult
     static func installAgentAndReport(
         _ agent: Agent, home: String = NSHomeDirectory(), templateText: String? = nil
     ) -> AgentStatus {
-        try? installAgent(agent, home: home, templateText: templateText)
+        do {
+            try installAgent(agent, home: home, templateText: templateText)
+        } catch {
+            var status = inspectAgent(agent, home: home, templateText: templateText)
+            status.message = "install failed: \(error)"
+            return status
+        }
         return inspectAgent(agent, home: home, templateText: templateText)
     }
 

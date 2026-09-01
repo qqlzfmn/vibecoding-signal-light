@@ -206,7 +206,17 @@ final class StatusBarController {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        SessionStore.clearSessionState()
+        do {
+            try SessionStore.clearSessionState()
+        } catch {
+            let failAlert = NSAlert()
+            failAlert.messageText = "Clear State Failed"
+            failAlert.informativeText = "\(error)"
+            failAlert.alertStyle = .warning
+            failAlert.addButton(withTitle: "OK")
+            failAlert.runModal()
+            return
+        }
         poller.refresh()
     }
 
@@ -249,7 +259,16 @@ final class StatusBarController {
             launchAlert.addButton(withTitle: "Yes")
             launchAlert.addButton(withTitle: "Not Now")
             if launchAlert.runModal() == .alertFirstButtonReturn {
-                try? LaunchdManager.install()
+                do {
+                    try LaunchdManager.install()
+                } catch {
+                    let failAlert = NSAlert()
+                    failAlert.messageText = "Auto-start Setup Failed"
+                    failAlert.informativeText = "\(error)"
+                    failAlert.alertStyle = .warning
+                    failAlert.addButton(withTitle: "OK")
+                    failAlert.runModal()
+                }
             }
         }
     }
