@@ -5,6 +5,16 @@ import AppKit
 enum SignalColor {
     case green, yellow, red, grey
 
+    /// Stable string key for the color (used by the detail panel).
+    var colorKey: String {
+        switch self {
+        case .green:  return "green"
+        case .yellow: return "yellow"
+        case .red:    return "red"
+        case .grey:   return "grey"
+        }
+    }
+
     var nsColor: NSColor {
         switch self {
         case .green:  return NSColor(red: 76/255,  green: 175/255, blue: 80/255,  alpha: 1)
@@ -88,22 +98,37 @@ let SIGNAL_DEFINITIONS: [String: SignalDefinition] = [
     ),
 ]
 
+// MARK: - Signal Semantics
+
+/// Signal-name classification used by aggregation and session lifecycle rules.
+/// Single source of truth — both `aggregateSignal` and `SessionStore` read these sets.
+enum SignalSemantics {
+    static let red: Set<String> = ["blocked"]
+    static let yellow: Set<String> = ["permission", "attention", "done"]
+    static let working: Set<String> = ["thinking", "working", "tool_done"]
+    static let sessionEnd: Set<String> = ["session_end"]
+    static let sessionClear: Set<String> = ["off"]
+    static let turnEnd: Set<String> = ["turn_end"]
+    /// On `turn_end`, a session currently in one of these states is kept.
+    static let turnEndKeep: Set<String> = ["permission", "blocked"]
+}
+
 // MARK: - Aggregate
 
 /// Priority: blocked > permission > attention > working > idle
 func aggregateSignal(from sessions: [String: SessionEntry]) -> String {
     let signals = sessions.values.map(\.signal)
 
-    if signals.contains(where: { $0 == "blocked" }) {
+    if signals.contains(where: { SignalSemantics.red.contains($0) }) {
         return "blocked"
     }
     if signals.contains("permission") {
         return "permission"
     }
-    if signals.contains(where: { $0 == "attention" || $0 == "done" }) {
+    if signals.contains(where: { SignalSemantics.yellow.contains($0) }) {
         return "attention"
     }
-    if signals.contains(where: { $0 == "thinking" || $0 == "working" || $0 == "tool_done" }) {
+    if signals.contains(where: { SignalSemantics.working.contains($0) }) {
         return "working"
     }
     return "idle"

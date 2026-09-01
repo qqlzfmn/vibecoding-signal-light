@@ -8,13 +8,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Write PID file for the Python CLI to detect running state.
-        let stateDir = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
-            ?? "/private/tmp/signal-light"
-        let pidPath = (stateDir as NSString).appendingPathComponent("gui-daemon.pid")
+        let pidPath = StatePaths.pidFile
 
         // Ensure state directory exists.
         try? FileManager.default.createDirectory(
-            atPath: stateDir, withIntermediateDirectories: true
+            atPath: StatePaths.stateDir, withIntermediateDirectories: true
         )
 
         // Write our PID.
@@ -33,9 +31,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         poller?.stop()
 
         // Clean up PID file.
-        let stateDir = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
-            ?? "/private/tmp/signal-light"
-        let pidPath = (stateDir as NSString).appendingPathComponent("gui-daemon.pid")
+        let pidPath = StatePaths.pidFile
         try? FileManager.default.removeItem(atPath: pidPath)
     }
 }

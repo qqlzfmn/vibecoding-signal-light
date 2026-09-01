@@ -13,10 +13,8 @@ final class LaunchdManager {
 
     static func install() throws {
         let execPath = Bundle.main.executablePath ?? ""
-        let stateDir = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
-            ?? "/private/tmp/signal-light"
 
-        let logPath = (stateDir as NSString).appendingPathComponent("app.log")
+        let logPath = StatePaths.logFile
 
         let plist = """
         <?xml version="1.0" encoding="UTF-8"?>

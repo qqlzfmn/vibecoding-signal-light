@@ -21,8 +21,7 @@ final class SessionPoller {
     var currentState: State { subject.value }
 
     init(stateDir: String? = nil, pollIntervalMs: Int = 500) {
-        let envDir = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
-        self.stateDir = stateDir ?? envDir ?? "/private/tmp/signal-light"
+        self.stateDir = stateDir ?? StatePaths.stateDir
         self.pollInterval = TimeInterval(pollIntervalMs) / 1000.0
         self.subject = CurrentValueSubject<State, Never>(
             State(aggregateSignal: "idle", sessionCount: 0, sessions: [:])

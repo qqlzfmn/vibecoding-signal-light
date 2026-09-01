@@ -101,7 +101,7 @@ final class StatusBarController {
                 summary: def?.summary ?? "",
                 sessionCount: state.sessionCount,
                 isRepeating: def?.isRepeating ?? false,
-                flashColor: signalColorKey(for: signalName)
+                flashColor: SIGNAL_DEFINITIONS[signalName]?.color.colorKey ?? "grey"
             )
         }
     }
@@ -159,14 +159,6 @@ final class StatusBarController {
         return def?.color.dimColor ?? SignalColor.grey.dimColor
     }
 
-    private func signalColorKey(for signal: String) -> String {
-        switch signal {
-        case "blocked": return "red"
-        case "permission", "attention", "done": return "yellow"
-        case "off": return "grey"
-        default: return "green"
-        }
-    }
 
     // MARK: - Actions
 
@@ -194,7 +186,7 @@ final class StatusBarController {
             summary: def?.summary ?? "",
             sessionCount: state.sessionCount,
             isRepeating: def?.isRepeating ?? false,
-            flashColor: signalColorKey(for: state.aggregateSignal)
+            flashColor: SIGNAL_DEFINITIONS[state.aggregateSignal]?.color.colorKey ?? "grey"
         )
         panel?.showPanel()
     }

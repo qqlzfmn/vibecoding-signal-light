@@ -6,18 +6,11 @@ enum SessionStore {
 
     // MARK: - Paths
 
-    static var stateDir: String {
-        ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
-            ?? "/private/tmp/signal-light"
-    }
+    static var stateDir: String { StatePaths.stateDir }
 
-    static var sessionFile: String {
-        (stateDir as NSString).appendingPathComponent("sessions.json")
-    }
+    static var sessionFile: String { StatePaths.sessionFile }
 
-    static var lockFile: String {
-        (stateDir as NSString).appendingPathComponent("state.lock")
-    }
+    static var lockFile: String { StatePaths.lockFile }
 
     static var sessionTTL: TimeInterval {
         if let raw = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_SESSION_TTL_SECONDS"],
@@ -27,49 +20,32 @@ enum SessionStore {
         return 86400.0
     }
 
-    // MARK: - Priority sets (mirrors session.py)
-
-    private static let redSignals: Set<String> = ["blocked"]
-    private static let yellowSignals: Set<String> = ["permission", "attention", "done"]
-    private static let workingSignals: Set<String> = ["thinking", "working", "tool_done"]
-    private static let sessionEndSignals: Set<String> = ["session_end"]
-    private static let sessionClearSignals: Set<String> = ["off"]
-    private static let turnEndSignals: Set<String> = ["turn_end"]
-    private static let turnEndKeepSignals: Set<String> = ["permission", "blocked"]
-
     // MARK: - Public API
 
     /// Update one session's signal. Returns the new aggregate signal name.
     @discardableResult
     static func applySessionSignal(sessionKey: String, signalName: String) -> String {
         return withLock {
-            var state = readSessionState()
-            var sessions = state["sessions"] as? [String: [String: Any]] ?? [:]
+            var state = readSessionFile()
             let now = Date().timeIntervalSince1970
-            pruneSessions(&sessions, now: now)
+            pruneSessions(&state.sessions, now: now)
 
-            if sessionEndSignals.contains(signalName) {
-                sessions.removeValue(forKey: sessionKey)
-            } else if sessionClearSignals.contains(signalName) {
-                sessions.removeValue(forKey: sessionKey)
-            } else if turnEndSignals.contains(signalName) {
-                if let current = sessions[sessionKey],
-                   let currentSignal = current["signal"] as? String,
-                   turnEndKeepSignals.contains(currentSignal) {
+            if SignalSemantics.sessionEnd.contains(signalName)
+                || SignalSemantics.sessionClear.contains(signalName) {
+                state.sessions.removeValue(forKey: sessionKey)
+            } else if SignalSemantics.turnEnd.contains(signalName) {
+                if let current = state.sessions[sessionKey],
+                   SignalSemantics.turnEndKeep.contains(current.signal) {
                     // keep the session — don't remove
                 } else {
-                    sessions.removeValue(forKey: sessionKey)
+                    state.sessions.removeValue(forKey: sessionKey)
                 }
             } else {
-                sessions[sessionKey] = [
-                    "signal": signalName,
-                    "updated_at": now,
-                ]
+                state.sessions[sessionKey] = SessionEntry(signal: signalName, updatedAt: now)
             }
 
-            let aggregate = aggregateSessions(sessions)
-            state["sessions"] = sessions
-            writeSessionState(state)
+            let aggregate = aggregateSignal(from: state.sessions)
+            writeSessionFile(state)
             return aggregate
         }
     }
@@ -77,74 +53,48 @@ enum SessionStore {
     /// Clear all tracked session states.
     static func clearSessionState() {
         withLock {
-            writeSessionState(["sessions": [String: Any]()])
+            writeSessionFile(SessionFile(sessions: [:]))
         }
     }
 
     /// Read the current snapshot (aggregate + sessions) without modifying.
+    /// `sessions` holds typed `SessionEntry` values.
     static func readSessionSnapshot() -> [String: Any] {
         return withLock {
-            let state = readSessionState()
-            var sessions = state["sessions"] as? [String: [String: Any]] ?? [:]
-            let now = Date().timeIntervalSince1970
-            pruneSessions(&sessions, now: now)
-            let aggregate = aggregateSessions(sessions)
+            var state = readSessionFile()
+            pruneSessions(&state.sessions, now: Date().timeIntervalSince1970)
             return [
-                "aggregate": aggregate,
-                "sessions": sessions,
+                "aggregate": aggregateSignal(from: state.sessions),
+                "sessions": state.sessions,
             ]
         }
     }
 
-    // MARK: - Aggregate
+    // MARK: - File I/O (typed JSON, see Models/SessionState.swift)
 
-    /// Priority: blocked > permission > attention > working > idle
-    static func aggregateSessions(_ sessions: [String: [String: Any]]) -> String {
-        let signals = sessions.values.compactMap { $0["signal"] as? String }
-
-        if signals.contains(where: { redSignals.contains($0) }) {
-            return "blocked"
-        }
-        if signals.contains("permission") {
-            return "permission"
-        }
-        if signals.contains(where: { yellowSignals.contains($0) }) {
-            return "attention"
-        }
-        if signals.contains(where: { workingSignals.contains($0) }) {
-            return "working"
-        }
-        return "idle"
-    }
-
-    // MARK: - File I/O
-
-    private static func readSessionState() -> [String: Any] {
+    /// Decode failure (missing/corrupt file or malformed JSON) yields an empty
+    /// state — same silent tolerance as before.
+    private static func readSessionFile() -> SessionFile {
         guard let data = FileManager.default.contents(atPath: sessionFile),
-              let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              state["sessions"] is [String: Any] else {
-            return ["sessions": [String: Any]()]
+              let state = try? JSONDecoder().decode(SessionFile.self, from: data) else {
+            return SessionFile(sessions: [:])
         }
         return state
     }
 
-    private static func writeSessionState(_ state: [String: Any]) {
+    private static func writeSessionFile(_ state: SessionFile) {
         try? FileManager.default.createDirectory(
             atPath: stateDir, withIntermediateDirectories: true
         )
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: state, options: [.prettyPrinted, .withoutEscapingSlashes]
-        ) else { return }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        guard let data = try? encoder.encode(state) else { return }
         try? data.write(to: URL(fileURLWithPath: sessionFile), options: .atomic)
     }
 
-    private static func pruneSessions(_ sessions: inout [String: [String: Any]], now: TimeInterval) {
-        let expired = sessions.filter { _, entry in
-            let updatedAt = entry["updated_at"] as? TimeInterval ?? 0
-            return now - updatedAt > sessionTTL
-        }
-        for key in expired.keys {
-            sessions.removeValue(forKey: key)
+    private static func pruneSessions(_ sessions: inout [String: SessionEntry], now: TimeInterval) {
+        sessions = sessions.filter { _, entry in
+            now - entry.updatedAt <= sessionTTL
         }
     }
 

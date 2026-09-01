@@ -26,12 +26,9 @@ enum ClaudeCodeHookAdapter {
         "error": "blocked",
     ]
 
-    // MARK: - Public API
-
     /// Parse hook input from argv + stdin JSON.
     static func readHookInput(argv: [String], stdinText: String) -> HookInput {
-        let eventFromArgs = eventFromArgs(argv)
-        var eventName: String? = eventFromArgs
+        var eventName: String? = eventFromArgs(argv)
         var payload: [String: Any] = [:]
 
         let trimmed = stdinText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,48 +96,12 @@ enum ClaudeCodeHookAdapter {
     // MARK: - Runner
 
     static func run(argv: [String]) -> Int32 {
-        let stdinText = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let environ = ProcessInfo.processInfo.environment
-
-        let input = readHookInput(argv: argv, stdinText: stdinText)
+        let input = readHookInput(argv: argv, stdinText: HookSupport.readStdinText())
         let signal = chooseSignal(eventName: input.eventName, payload: input.payload)
         let key = sessionKey(payload: input.payload, environ: environ)
-
-        let aggregate = SessionStore.applySessionSignal(sessionKey: key, signalName: signal)
-        print("Session \(key): \(signal); aggregate=\(aggregate)")
-        return 0
+        return HookSupport.applyAndReport(sessionKey: key, signal: signal)
     }
 
-    // MARK: - Internal helpers
-
-    /// Extract event name from command-line arguments.
-    private static func eventFromArgs(_ argv: [String]) -> String? {
-        for (index, value) in argv.enumerated() {
-            if (value == "--event" || value == "-e") && index + 1 < argv.count {
-                return argv[index + 1]
-            }
-            if value.hasPrefix("--event=") {
-                return String(value.dropFirst("--event=".count))
-            }
-        }
-        // Positional: second argument that doesn't start with '-'.
-        if argv.count >= 2 && !argv[1].hasPrefix("-") {
-            return argv[1]
-        }
-        return nil
-    }
-
-    // MARK: - Types
-
-    struct HookInput {
-        let eventName: String
-        let payload: [String: Any]
-    }
 }
 
-/// Valid signal names (mirrors signals.py SIGNALS dict keys).
-private let SIGNAL_NAMES: Set<String> = [
-    "idle", "thinking", "working", "tool_done",
-    "attention", "permission", "blocked", "done",
-    "session_start", "session_end", "session_done", "off",
-]

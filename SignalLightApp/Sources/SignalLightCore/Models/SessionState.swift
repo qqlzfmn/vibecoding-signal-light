@@ -14,3 +14,9 @@ struct SessionEntry: Codable {
         case updatedAt = "updated_at"
     }
 }
+
+/// Serializable view of the current aggregate + sessions, as printed by `status`.
+struct SessionSnapshot: Codable {
+    var aggregate: String
+    var sessions: [String: SessionEntry]
+}

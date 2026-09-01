@@ -29,59 +29,57 @@ final class SessionStoreTests {
         try! data.write(to: URL(fileURLWithPath: SessionStore.sessionFile))
     }
 
-    private func readSessionsFile() -> [String: [String: Any]] {
-        guard let data = FileManager.default.contents(atPath: SessionStore.sessionFile),
-              let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let sessions = state["sessions"] as? [String: [String: Any]] else {
+    private func readSessionsFile() -> [String: SessionEntry] {
+        guard let data = FileManager.default.contents(atPath: SessionStore.sessionFile) else {
             return [:]
         }
-        return sessions
+        return (try? JSONDecoder().decode(SessionFile.self, from: data))?.sessions ?? [:]
     }
 
-    // MARK: - aggregateSessions priority
+    // MARK: - Aggregate priority (unified implementation)
+
+    private func entry(_ signal: String) -> SessionEntry {
+        SessionEntry(signal: signal, updatedAt: 0)
+    }
 
     @Test func aggregatePriorityBlockedHighest() {
-        let now = Date().timeIntervalSince1970
-        let sessions: [String: [String: Any]] = [
-            "a": ["signal": "working", "updated_at": now],
-            "b": ["signal": "permission", "updated_at": now],
-            "c": ["signal": "blocked", "updated_at": now],
+        let sessions = [
+            "a": entry("working"),
+            "b": entry("permission"),
+            "c": entry("blocked"),
         ]
-        #expect(SessionStore.aggregateSessions(sessions) == "blocked")
+        #expect(aggregateSignal(from: sessions) == "blocked")
     }
 
     @Test func aggregatePriorityPermission() {
-        let now = Date().timeIntervalSince1970
-        let sessions: [String: [String: Any]] = [
-            "a": ["signal": "working", "updated_at": now],
-            "b": ["signal": "permission", "updated_at": now],
+        let sessions = [
+            "a": entry("working"),
+            "b": entry("permission"),
         ]
-        #expect(SessionStore.aggregateSessions(sessions) == "permission")
+        #expect(aggregateSignal(from: sessions) == "permission")
     }
 
     @Test func aggregatePriorityAttentionSet() {
-        let now = Date().timeIntervalSince1970
         for signal in ["attention", "done"] {
-            let sessions: [String: [String: Any]] = [
-                "a": ["signal": signal, "updated_at": now],
-                "b": ["signal": "working", "updated_at": now],
+            let sessions = [
+                "a": entry(signal),
+                "b": entry("working"),
             ]
-            #expect(SessionStore.aggregateSessions(sessions) == "attention", "\(signal)")
+            #expect(aggregateSignal(from: sessions) == "attention", "\(signal)")
         }
     }
 
     @Test func aggregatePriorityWorkingSet() {
-        let now = Date().timeIntervalSince1970
         for signal in ["thinking", "working", "tool_done"] {
-            let sessions: [String: [String: Any]] = [
-                "a": ["signal": signal, "updated_at": now],
+            let sessions = [
+                "a": entry(signal),
             ]
-            #expect(SessionStore.aggregateSessions(sessions) == "working")
+            #expect(aggregateSignal(from: sessions) == "working")
         }
     }
 
     @Test func aggregateEmptyIsIdle() {
-        #expect(SessionStore.aggregateSessions([:]) == "idle")
+        #expect(aggregateSignal(from: [:]) == "idle")
     }
 
     // MARK: - applySessionSignal
@@ -91,7 +89,7 @@ final class SessionStoreTests {
         #expect(aggregate == "working")
 
         let sessions = readSessionsFile()
-        #expect(sessions["s1"]?["signal"] as? String == "working")
+        #expect(sessions["s1"]?.signal == "working")
     }
 
     @Test func applySessionEndRemovesSession() {
@@ -124,7 +122,7 @@ final class SessionStoreTests {
         SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
 
         let sessions = readSessionsFile()
-        #expect(sessions["s1"]?["signal"] as? String == "permission")
+        #expect(sessions["s1"]?.signal == "permission")
     }
 
     @Test func turnEndKeepsBlockedSession() {
@@ -132,7 +130,7 @@ final class SessionStoreTests {
         SessionStore.applySessionSignal(sessionKey: "s1", signalName: "turn_end")
 
         let sessions = readSessionsFile()
-        #expect(sessions["s1"]?["signal"] as? String == "blocked")
+        #expect(sessions["s1"]?.signal == "blocked")
     }
 
     // MARK: - TTL pruning
@@ -145,7 +143,7 @@ final class SessionStoreTests {
         ])
 
         let snapshot = SessionStore.readSessionSnapshot()
-        let sessions = snapshot["sessions"] as? [String: [String: Any]] ?? [:]
+        let sessions = snapshot["sessions"] as? [String: SessionEntry] ?? [:]
         #expect(sessions["expired"] == nil)
         #expect(sessions["fresh"] != nil)
         #expect(snapshot["aggregate"] as? String == "blocked")

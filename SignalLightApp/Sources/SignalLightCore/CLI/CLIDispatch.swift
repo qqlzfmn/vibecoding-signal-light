@@ -24,10 +24,13 @@ public enum CLIDispatch {
 
         case "status":
             let snapshot = SessionStore.readSessionSnapshot()
-            let data = try! JSONSerialization.data(
-                withJSONObject: snapshot,
-                options: [.prettyPrinted, .withoutEscapingSlashes]
+            let output = SessionSnapshot(
+                aggregate: snapshot["aggregate"] as? String ?? "idle",
+                sessions: snapshot["sessions"] as? [String: SessionEntry] ?? [:]
             )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+            let data = try! encoder.encode(output)
             if let json = String(data: data, encoding: .utf8) {
                 print(json)
             }
