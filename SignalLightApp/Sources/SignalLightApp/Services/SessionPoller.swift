@@ -41,6 +41,11 @@ final class SessionPoller {
         timer = nil
     }
 
+    /// Force an immediate poll (e.g. right after manually clearing session state).
+    func refresh() {
+        poll()
+    }
+
     private func poll() {
         let path = (stateDir as NSString).appendingPathComponent("sessions.json")
         guard let data = FileManager.default.contents(atPath: path) else {

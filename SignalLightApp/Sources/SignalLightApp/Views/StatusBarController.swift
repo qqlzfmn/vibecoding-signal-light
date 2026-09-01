@@ -62,6 +62,10 @@ final class StatusBarController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let clearItem = NSMenuItem(title: "Clear State", action: #selector(clearState), keyEquivalent: "")
+        clearItem.target = self
+        menu.addItem(clearItem)
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -197,6 +201,21 @@ final class StatusBarController {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    /// Manually clear all tracked session state and reset the light to idle.
+    /// Safety valve for when an agent finishes but its clearing hook doesn't fire.
+    @objc private func clearState() {
+        let alert = NSAlert()
+        alert.messageText = "Clear State?"
+        alert.informativeText = "Reset the signal light to idle and forget all tracked agent sessions."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        SessionStore.clearSessionState()
+        poller.refresh()
     }
 
     @objc private func installHooksForAgent(_ sender: NSMenuItem) {
