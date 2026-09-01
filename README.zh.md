@@ -89,7 +89,7 @@ $APP codex-hook Stop
 | `PostToolUse` | 绿灯闪烁（工作中） |
 | `PermissionRequest` | 黄灯闪烁 |
 | `Stop` | 清理普通工作态 |
-| `SessionEnd` | 绿灯短闪提示完成，然后恢复当前聚合状态 |
+| `SessionEnd` | 清理该会话记录，恢复当前聚合状态 |
 
 完整 `~/.codex/hooks.json` 示例见 [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md)。
 
@@ -115,7 +115,7 @@ echo '{"event":"Notification","session_id":"demo"}' | $APP claude-code-hook
 | `Notification` | 黄灯闪烁 |
 | `PermissionRequest` | 黄灯闪烁 |
 | `Stop` | 清理普通工作态 |
-| `SessionEnd` | 绿灯短闪提示完成，然后恢复当前聚合状态 |
+| `SessionEnd` | 清理该会话记录，恢复当前聚合状态 |
 
 完整 `~/.claude/settings.json` 示例见 [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md)。
 
@@ -141,7 +141,7 @@ git config core.hooksPath .githooks
 
 因此，一个会话正在等待权限时，即使另一个会话开始工作，红灯也不会被覆盖。普通 `Stop` 只会清掉非紧急的工作态，不会误清除已有红灯告警。
 
-当某个已记录的会话结束、但其它会话还在运行时，运行时会让绿灯短暂闪烁，提示"有一个会话完成了"，然后恢复当前聚合状态。如果所有会话都结束了，最终会回到绿灯常亮。红灯或黄灯告警不会被这个完成提示打断。
+当某个已记录的会话结束时，运行时会清理该会话的记录并重新计算聚合状态：如果其它会话还在运行，灯立即切换到剩余会话的聚合状态；如果所有会话都结束了，最终回到绿灯常亮。红灯或黄灯告警不受会话结束影响。
 
 ## 项目状态
 

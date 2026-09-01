@@ -51,13 +51,18 @@ There is no linter or formatter configured. No CI pipeline.
 - **`SignalLightCore/`** — library target with all business logic (testable):
   - `App/AppDelegate.swift` — PID file, poller init, menu bar setup.
   - `Core/` (hook adapters and session management)
-    - `SessionStore.swift` — Reads/writes `sessions.json` with `fcntl.flock` locking, TTL pruning, and priority-based aggregation.
+    - `SessionStore.swift` — Reads/writes `sessions.json` with typed JSON (`SessionFile`/`SessionEntry`), `fcntl.flock` locking, TTL pruning, and priority-based aggregation. Write/lock failures throw `SessionStoreError` (`lockUnavailable`/`writeFailed`); reads tolerate missing or corrupt files (corrupt files traced to stderr).
+    - `HookSupport.swift` — Shared hook-adapter pieces: `HookInput`, `SIGNAL_NAMES`, event-name parsing, and the `applyAndReport` tail (persist + report; errors to stderr with exit code 1).
     - `CodexHookAdapter.swift` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection (error status, exit_status, tool_error).
     - `ClaudeCodeHookAdapter.swift` — Maps Claude Code hook events to signal names. Supports `stop_reason` handling and `SubagentStart`/`SubagentStop`/`Notification`.
-    - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Installs the bundled omp/pi-coding-agent hook template into `~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`. Handles merge with existing hooks and creates backups.
+    - `HookAgent.swift` — `HookInstaller.Agent` enum and `AgentStatus`.
+    - `HookConfigMerge.swift` — Pure merge/replace helpers for JSON hook configs.
+    - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Installs the bundled omp/pi-coding-agent hook template into `~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`. Handles merge with existing hooks and creates backups. `installAgent` throws; `installAgentAndReport` surfaces failures via `AgentStatus.message`.
+    - `InstallHooksCLI.swift` — `install-hooks` subcommand: argument parsing, agent selection, interactive prompt.
   - `Models/`
+    - `StatePaths.swift` — Single source of truth for on-disk state paths; honours `SIGNAL_LIGHT_STATE_DIR`.
     - `SessionState.swift` — Codable JSON model matching the `sessions.json` format.
-    - `SignalDefinition.swift` — 12 signal definitions with color mapping, priority classification, and `aggregateSignal()` computation.
+    - `SignalDefinition.swift` — 11 signal definitions with color mapping, `SignalSemantics` classification sets, and `aggregateSignal()` computation.
   - `Services/`
     - `SessionPoller.swift` — 500ms Combine-based polling of `sessions.json`.
     - `LaunchdManager.swift` — macOS launchd plist for auto-start on login.
@@ -77,6 +82,7 @@ There is no linter or formatter configured. No CI pipeline.
 - **JSON file as contract**: The CLI writes `sessions.json`; the GUI reads it. No IPC needed.
 - **Multi-session aggregation**: `SessionStore.aggregateSessions()` picks the highest-priority signal so urgent alerts (red/yellow) are never masked by normal activity.
 - **File-lock concurrency**: `SessionStore.withLock()` uses `fcntl.flock(LOCK_EX)` for exclusive access across concurrent hook processes.
+- **Errors are explicit**: No silent `try?` on failure paths that matter. Session writes/locks throw `SessionStoreError`; CLI callers print `signal-light: <error>` to stderr and exit 1; GUI callers show an alert. Read failures are tolerated (empty state) but corrupt `sessions.json` is traced to stderr.
 
 ### Entry points (subcommands of the single binary)
 
@@ -84,7 +90,7 @@ There is no linter or formatter configured. No CI pipeline.
 |---|---|
 | `codex-hook` | `CodexHookAdapter.run()` |
 | `claude-code-hook` | `ClaudeCodeHookAdapter.run()` |
-| `install-hooks` | `HookInstaller.installAgent()` |
+| `install-hooks` | `InstallHooksCLI.run()` |
 | `status` | `SessionStore.readSessionSnapshot()` |
 | `clear-state` | `SessionStore.clearSessionState()` |
 

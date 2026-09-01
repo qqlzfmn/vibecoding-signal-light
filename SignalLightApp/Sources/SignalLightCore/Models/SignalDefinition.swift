@@ -88,10 +88,6 @@ let SIGNAL_DEFINITIONS: [String: SignalDefinition] = [
         name: "session_end", summary: "Codex 会话结束，回到当前聚合状态。",
         color: .green, isRepeating: false, flashColor: .green
     ),
-    "session_done": SignalDefinition(
-        name: "session_done", summary: "一个 Agent 会话结束。",
-        color: .green, isRepeating: true, flashColor: .green
-    ),
     "off": SignalDefinition(
         name: "off", summary: "关闭所有灯。",
         color: .grey, isRepeating: false, flashColor: .grey

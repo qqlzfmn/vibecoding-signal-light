@@ -15,17 +15,7 @@ const REDACT = process.env.OMP_OBSERVABILITY_REDACT !== "0";
 // 找不到时跳过信号灯转发，仅保留 JSONL 观测。
 const SIGNAL_LIGHT_CANDIDATES = [
   process.env.SIGNAL_LIGHT_BIN,
-  join(
-    homedir(),
-    "Workspace",
-    "vibecoding-signal-light",
-    "SignalLightApp",
-    ".build",
-    "SignalLightApp.app",
-    "Contents",
-    "MacOS",
-    "SignalLightApp",
-  ),
+  "/Applications/SignalLightApp.app/Contents/MacOS/SignalLightApp",
   join(
     homedir(),
     "Downloads",

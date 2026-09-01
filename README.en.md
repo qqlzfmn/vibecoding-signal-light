@@ -92,7 +92,7 @@ Recommended hook mapping:
 | `PostToolUse` | Green flash (working) |
 | `PermissionRequest` | Yellow flashing |
 | `Stop` | Clear normal working state |
-| `SessionEnd` | Brief green completion blink, then current aggregate state |
+| `SessionEnd` | Clears that session's record, then current aggregate state |
 
 See [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md) for a complete `~/.codex/hooks.json` example.
 
@@ -118,7 +118,7 @@ Supported Claude Code events include:
 | `Notification` | Yellow flashing |
 | `PermissionRequest` | Yellow flashing |
 | `Stop` | Clear normal working state |
-| `SessionEnd` | Brief green completion blink, then current aggregate state |
+| `SessionEnd` | Clears that session's record, then current aggregate state |
 
 See [docs/LAMP_LANGUAGE.md](docs/LAMP_LANGUAGE.md) for a complete `~/.claude/settings.json` example.
 
@@ -144,7 +144,7 @@ red flashing > yellow flashing > working cycle > steady green
 
 That means one session waiting for permission will stay red even if another session starts working. A normal `Stop` only clears non-urgent working state; it does not erase an existing red alert.
 
-When one tracked session ends while other sessions are still running, the runtime briefly flashes green as a completion cue, then restores the current aggregate state. If all sessions have ended, it settles on steady green. Red or yellow alerts are not interrupted by this completion cue.
+When a tracked session ends, the runtime removes that session's record and recomputes the aggregate: if other sessions are still running, the light switches to their aggregate state; if all sessions have ended, it settles on steady green. Red or yellow alerts are unaffected by session endings.
 
 ## Project Status
 

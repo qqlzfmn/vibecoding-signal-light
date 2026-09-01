@@ -6,11 +6,11 @@ import Foundation
 
     // MARK: - Registry completeness
 
-    @Test func allTwelveSignalsDefined() {
+    @Test func allElevenSignalsDefined() {
         let expected: Set<String> = [
             "idle", "thinking", "working", "tool_done",
             "attention", "permission", "blocked", "done",
-            "session_start", "session_end", "session_done", "off",
+            "session_start", "session_end", "off",
         ]
         #expect(Set(SIGNAL_DEFINITIONS.keys) == expected)
     }
