@@ -16,7 +16,16 @@ Communication between agents and the GUI is via a shared JSON file (`/private/tm
 
 ```bash
 # Build
-cd SignalLightApp && ./build.sh      # Build the macOS app
+cd SignalLightApp && ./build.sh      # Build the macOS app (SwiftPM release build + assemble .app)
+
+# Test (Swift Testing suite; CLT-only machines need the Swift Testing framework paths,
+# see Package.swift and Tests/ for details)
+cd SignalLightApp && swift test --enable-swift-testing \
+  -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing \
+  -Xlinker -F -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
+  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 
 # Launch GUI
 open SignalLightApp/.build/SignalLightApp.app  # Launch menu bar app
@@ -37,34 +46,34 @@ There is no linter or formatter configured. No CI pipeline.
 
 ## Architecture
 
-### Source layout (`SignalLightApp/Sources/SignalLightApp/`)
+### Source layout (SwiftPM; `SignalLightApp/Sources/`)
 
-- **`App/`**
-  - `main.swift` — Entry point. Dispatches to CLI mode (hook/status/install-hooks) or launches NSApplication for GUI mode.
-  - `AppDelegate` — PID file, poller init, menu bar setup.
+- **`SignalLightCore/`** — library target with all business logic (testable):
+  - `App/AppDelegate.swift` — PID file, poller init, menu bar setup.
+  - `Core/` (hook adapters and session management)
+    - `SessionStore.swift` — Reads/writes `sessions.json` with `fcntl.flock` locking, TTL pruning, and priority-based aggregation.
+    - `CodexHookAdapter.swift` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection (error status, exit_status, tool_error).
+    - `ClaudeCodeHookAdapter.swift` — Maps Claude Code hook events to signal names. Supports `stop_reason` handling and `SubagentStart`/`SubagentStop`/`Notification`.
+    - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Installs the bundled omp/pi-coding-agent hook template into `~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`. Handles merge with existing hooks and creates backups.
+  - `Models/`
+    - `SessionState.swift` — Codable JSON model matching the `sessions.json` format.
+    - `SignalDefinition.swift` — 12 signal definitions with color mapping, priority classification, and `aggregateSignal()` computation.
+  - `Services/`
+    - `SessionPoller.swift` — 500ms Combine-based polling of `sessions.json`.
+    - `LaunchdManager.swift` — macOS launchd plist for auto-start on login.
+  - `Views/`
+    - `StatusBarController.swift` — NSStatusItem with flash animation and right-click menu (Show Details, Install Hooks, Quit).
+    - `DetailPanelWindow.swift` — Floating NSPanel with traffic light animation.
+    - `TrafficLightView.swift` — Custom NSView drawing three colored circles (red/yellow/green).
+  - `CLI/CLIDispatch.swift` — CLI subcommand dispatch (codex-hook / claude-code-hook / status / install-hooks / clear-state); returns exit code or nil for GUI mode.
 
-- **`Core/`** (hook adapters and session management)
-  - `SessionStore.swift` — Reads/writes `sessions.json` with `fcntl.flock` locking, TTL pruning, and priority-based aggregation.
-  - `CodexHookAdapter.swift` — Maps Codex lifecycle events to signal names. Deep payload introspection for failure detection (error status, exit_status, tool_error).
-  - `ClaudeCodeHookAdapter.swift` — Maps Claude Code hook events to signal names. Supports `stop_reason` handling and `SubagentStart`/`SubagentStop`/`Notification`.
-  - `HookInstaller.swift` — Reads/writes `~/.codex/hooks.json` and `~/.claude/settings.json` to register hook commands. Installs the bundled omp/pi-coding-agent hook template into `~/.omp/agent/extensions/` and `~/.pi/agent/extensions/`. Handles merge with existing hooks and creates backups.
+- **`SignalLightApp/`** — executable target; thin `main.swift` that calls `CLIDispatch.run(CommandLine.arguments)` and launches NSApplication on nil.
 
-- **`Models/`**
-  - `SessionState.swift` — Codable JSON model matching the `sessions.json` format.
-  - `SignalDefinition.swift` — 12 signal definitions with color mapping, priority classification, and `aggregateSignal()` computation.
-
-- **`Services/`**
-  - `SessionPoller.swift` — 500ms Combine-based polling of `sessions.json`.
-  - `LaunchdManager.swift` — macOS launchd plist for auto-start on login.
-
-- **`Views/`**
-  - `StatusBarController.swift` — NSStatusItem with flash animation and right-click menu (Show Details, Install Hooks, Quit).
-  - `DetailPanelWindow.swift` — Floating NSPanel with traffic light animation.
-  - `TrafficLightView.swift` — Custom NSView drawing three colored circles (red/yellow/green).
+- **`Tests/SignalLightAppTests/`** — Swift Testing suite (hook adapters, SessionStore, HookInstaller, signal definitions).
 
 ### Key patterns
 
-- **Single binary, dual mode**: `main.swift` checks `CommandLine.arguments` — if a subcommand is present, it runs the CLI handler; otherwise it launches NSApplication.
+- **Single binary, dual mode**: `CLIDispatch.run(CommandLine.arguments)` checks the arguments — if a subcommand is present, it runs the CLI handler and returns an exit code; on nil the thin `main.swift` launches NSApplication.
 - **JSON file as contract**: The CLI writes `sessions.json`; the GUI reads it. No IPC needed.
 - **Multi-session aggregation**: `SessionStore.aggregateSessions()` picks the highest-priority signal so urgent alerts (red/yellow) are never masked by normal activity.
 - **File-lock concurrency**: `SessionStore.withLock()` uses `fcntl.flock(LOCK_EX)` for exclusive access across concurrent hook processes.

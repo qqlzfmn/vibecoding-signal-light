@@ -1,10 +1,12 @@
 import AppKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var poller: SessionPoller?
     private var statusBarController: StatusBarController?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public override init() {}
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         // Write PID file for the Python CLI to detect running state.
         let stateDir = ProcessInfo.processInfo.environment["SIGNAL_LIGHT_STATE_DIR"]
             ?? "/private/tmp/signal-light"
@@ -27,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         poller.start()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         poller?.stop()
 
         // Clean up PID file.

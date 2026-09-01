@@ -62,8 +62,7 @@ enum HookInstaller {
             }
         }
 
-        var configPath: String {
-            let home = NSHomeDirectory()
+        func configPath(inHome home: String) -> String {
             switch self {
             case .codex:
                 return (home as NSString).appendingPathComponent(".codex/hooks.json")
@@ -76,6 +75,10 @@ enum HookInstaller {
                 return (home as NSString)
                     .appendingPathComponent(".pi/agent/extensions/observability-signal-light.ts")
             }
+        }
+
+        var configPath: String {
+            configPath(inHome: NSHomeDirectory())
         }
 
         var events: [String: Int] {
@@ -137,9 +140,9 @@ enum HookInstaller {
 
     // MARK: - Inspection
 
-    static func inspectAgent(_ agent: Agent) -> AgentStatus {
+    static func inspectAgent(_ agent: Agent, home: String = NSHomeDirectory()) -> AgentStatus {
         if agent.isTemplateInstall {
-            let path = agent.configPath
+            let path = agent.configPath(inHome: home)
             let exists = FileManager.default.fileExists(atPath: path)
             let matches = exists
                 && (try? String(contentsOfFile: path, encoding: .utf8)) == templateHookText
@@ -153,9 +156,9 @@ enum HookInstaller {
                 message: !exists ? "missing" : (matches ? "installed" : "outdated")
             )
         }
-        let configExists = FileManager.default.fileExists(atPath: agent.configPath)
+        let configExists = FileManager.default.fileExists(atPath: agent.configPath(inHome: home))
 
-        let (config, validJson) = loadJSONConfig(at: agent.configPath)
+        let (config, validJson) = loadJSONConfig(at: agent.configPath(inHome: home))
 
         guard configExists else {
             return AgentStatus(
@@ -229,17 +232,17 @@ enum HookInstaller {
 
     // MARK: - Install
 
-    static func installAgent(_ agent: Agent) throws {
+    static func installAgent(_ agent: Agent, home: String = NSHomeDirectory()) throws {
         if agent.isTemplateInstall {
-            try installTemplateHook(agent: agent)
+            try installTemplateHook(agent: agent, home: home)
             return
         }
-        var (config, validJson) = loadJSONConfig(at: agent.configPath)
+        var (config, validJson) = loadJSONConfig(at: agent.configPath(inHome: home))
         if !validJson {
             config = [:]
         }
 
-        let originalText = try? String(contentsOfFile: agent.configPath, encoding: .utf8)
+        let originalText = try? String(contentsOfFile: agent.configPath(inHome: home), encoding: .utf8)
 
         // Ensure hooks dict exists.
         var hooks = (config["hooks"] as? [String: Any]) ?? [:]
@@ -266,21 +269,21 @@ enum HookInstaller {
         }
 
         // Backup existing config.
-        if FileManager.default.fileExists(atPath: agent.configPath) {
-            backupConfig(at: agent.configPath)
+        if FileManager.default.fileExists(atPath: agent.configPath(inHome: home)) {
+            backupConfig(at: agent.configPath(inHome: home))
         }
 
         // Write.
-        let dir = (agent.configPath as NSString).deletingLastPathComponent
+        let dir = (agent.configPath(inHome: home) as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        try newTextNL.write(toFile: agent.configPath, atomically: true, encoding: .utf8)
+        try newTextNL.write(toFile: agent.configPath(inHome: home), atomically: true, encoding: .utf8)
     }
 
     /// Install hooks for the given agent. Returns the status after install.
     @discardableResult
-    static func installAgentAndReport(_ agent: Agent) -> AgentStatus {
-        try? installAgent(agent)
-        return inspectAgent(agent)
+    static func installAgentAndReport(_ agent: Agent, home: String = NSHomeDirectory()) -> AgentStatus {
+        try? installAgent(agent, home: home)
+        return inspectAgent(agent, home: home)
     }
 
     // MARK: - Internal helpers
@@ -312,14 +315,14 @@ enum HookInstaller {
 
     /// omp/pi 的 hook 是 TS 扩展模板（bundle 内 `omp-hook-template.ts`），
     /// 安装 = 复制到 agent 的用户级扩展目录，内容一致时幂等跳过。
-    private static func installTemplateHook(agent: Agent) throws {
+    private static func installTemplateHook(agent: Agent, home: String) throws {
         guard let templateURL = Bundle.main.url(
             forResource: "omp-hook-template", withExtension: "ts"
         ) else {
             throw InstallError.templateMissing
         }
         let template = try String(contentsOf: templateURL, encoding: .utf8)
-        let target = agent.configPath
+        let target = agent.configPath(inHome: home)
 
         if let existing = try? String(contentsOfFile: target, encoding: .utf8),
            existing == template {
